@@ -132,11 +132,12 @@ export async function getRocket(id: number): Promise<CatalogRocket | null> {
   }
 }
 
-export async function getAgencyRockets(agencyId: number, limit = 16): Promise<CatalogRocket[]> {
-  if (!Number.isInteger(agencyId) || agencyId < 1) return [];
+export async function getAgencyRockets(manufacturerName: string, limit = 16): Promise<CatalogRocket[]> {
+  const normalizedName = manufacturerName.trim();
+  if (!normalizedName) return [];
   try {
     const query = new URLSearchParams({
-      manufacturer__id: String(agencyId),
+      manufacturer__name: normalizedName,
       limit: String(Math.min(Math.max(limit, 1), 32)),
       ordering: "-total_launch_count",
       mode: "detailed",
@@ -151,7 +152,9 @@ export async function getAgencyRockets(agencyId: number, limit = 16): Promise<Ca
     );
     if (!response.ok) return [];
     const data = (await response.json()) as { results?: ApiRocket[] };
-    return (data.results ?? []).map(mapRocket);
+    return (data.results ?? [])
+      .map(mapRocket)
+      .filter((rocket) => rocket.manufacturer.toLowerCase() === normalizedName.toLowerCase());
   } catch {
     return [];
   }
