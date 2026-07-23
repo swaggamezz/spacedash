@@ -284,9 +284,9 @@ export function Dashboard({ launches }: { launches: Launch[] }) {
       <SpaceAssistant context={selectedRocket?.name ?? (active === "Starship" ? "Starship" : "ruimtevaart")} />
 
       <nav className="mobile-nav">
-        {nav.slice(0, 4).map(([icon, label]) => (
+        {nav.map(([icon, label]) => (
           <button className={active === label ? "active" : ""} key={label} onClick={() => setActive(label)}>
-            <i>{icon}</i><span>{label}</span>
+            <i>{icon}</i><span>{label === "Agentschappen" ? "Agencies" : label}</span>
           </button>
         ))}
       </nav>
