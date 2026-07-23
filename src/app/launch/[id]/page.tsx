@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { getLaunch, getRelatedLaunches } from "@/lib/launches";
 import { MissionPage } from "@/components/mission-page";
 
-export const revalidate = 300;
+export const revalidate = 60;
 
 type Props = { params: Promise<{ id: string }> };
 
