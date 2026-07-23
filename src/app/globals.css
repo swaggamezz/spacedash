@@ -346,8 +346,9 @@ header { height: 68px; border-bottom: 1px solid var(--line); display: flex; alig
   .launch-grid, .full-grid { grid-template-columns: 1fr 1fr; }
   .stats { grid-template-columns: 1fr 1fr; gap: 25px 0; }
   .stats > div:nth-child(2) { border: 0; }
-  .mobile-nav { position: fixed; display: grid; grid-template-columns: repeat(4,1fr); bottom: 0; left: 0; right: 0; height: 66px; background: rgba(8,15,14,.95); backdrop-filter: blur(18px); border-top: 1px solid var(--line); z-index: 10; }
-  .mobile-nav button { border: 0; background: none; color: #637870; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 8px; }
+  .mobile-nav { position: fixed; display: grid; grid-template-columns: repeat(6,minmax(52px,1fr)); bottom: 0; left: 0; right: 0; height: 66px; overflow-x:auto; background: rgba(8,15,14,.95); backdrop-filter: blur(18px); border-top: 1px solid var(--line); z-index: 10; }
+  .mobile-nav button { min-width:0;border: 0; background: none; color: #637870; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 7px; }
+  .mobile-nav button span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .mobile-nav button i { font-style: normal; font-size: 16px; }
   .mobile-nav button.active { color: var(--lime); }
   .starship-masthead{height:560px}.starship-copy{left:24px;top:27px;bottom:25px;width:70%}.starship-copy h2{font-size:72px}.starship-diagram{right:8%;opacity:.6}.spec-strip{grid-template-columns:repeat(3,1fr)}.spec-strip>div:nth-child(3){border-right:0}.starship-columns{grid-template-columns:1fr}.rocket-table-head span:nth-child(3),.rocket-table-head span:nth-child(4),.rocket-table button>span:nth-child(3),.rocket-table button>span:nth-child(4){display:none}.rocket-table-head,.rocket-table button{grid-template-columns:2fr 1.3fr 1.3fr 20px}
