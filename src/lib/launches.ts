@@ -42,9 +42,16 @@ type ApiLaunch = {
     location?: { name?: string };
   } | null;
   probability?: number | null;
-  vid_urls?: Array<{ url?: string; priority?: number; title?: string }>;
+  vid_urls?: ApiUrl[];
+  vidURLs?: ApiUrl[];
   webcast_live?: boolean;
-  infoURLs?: string[];
+  infoURLs?: Array<string | ApiUrl>;
+};
+
+type ApiUrl = {
+  url?: string | { url?: string };
+  priority?: number;
+  title?: string;
 };
 
 const fallback: Launch[] = [
@@ -116,10 +123,30 @@ function statusOf(item: ApiLaunch, past: boolean): LaunchStatus {
   return past ? "success" : "upcoming";
 }
 
+function externalUrl(value: unknown): string | null {
+  let candidate: unknown = value;
+
+  // Launch Library has returned both plain strings and nested URL objects.
+  for (let depth = 0; depth < 3 && candidate && typeof candidate === "object"; depth += 1) {
+    candidate = (candidate as { url?: unknown }).url;
+  }
+
+  if (typeof candidate !== "string") return null;
+
+  try {
+    const parsed = new URL(candidate);
+    return parsed.protocol === "https:" || parsed.protocol === "http:"
+      ? parsed.toString()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function mapLaunch(item: ApiLaunch, past = false): Launch {
   const image =
     typeof item.image === "string" ? item.image : item.image?.image_url ?? null;
-  const streams = [...(item.vid_urls ?? [])].sort(
+  const streams = [...(item.vid_urls ?? item.vidURLs ?? [])].sort(
     (a, b) => (a.priority ?? 99) - (b.priority ?? 99),
   );
 
@@ -138,8 +165,10 @@ function mapLaunch(item: ApiLaunch, past = false): Launch {
     status: statusOf(item, past),
     statusLabel: item.status?.name ?? (past ? "Completed" : "Scheduled"),
     orbit: item.mission?.orbit?.name ?? "Niet bekend",
-    webcast: streams[0]?.url ?? null,
-    infoUrl: item.infoURLs?.[0] ?? null,
+    webcast:
+      streams.map((stream) => externalUrl(stream)).find(Boolean) ?? null,
+    infoUrl:
+      item.infoURLs?.map((url) => externalUrl(url)).find(Boolean) ?? null,
     probability: item.probability ?? null,
   };
 }
