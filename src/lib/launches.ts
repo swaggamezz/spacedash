@@ -18,6 +18,75 @@ export type Launch = {
   webcast: string | null;
   infoUrl: string | null;
   probability: number | null;
+  lastUpdated?: string;
+  missionType?: string;
+  weatherConcerns?: string | null;
+  holdReason?: string | null;
+  failReason?: string | null;
+  hashtag?: string | null;
+  infographic?: string | null;
+  streams?: string[];
+  rocketDetails?: {
+    configurationId?: number;
+    family?: string;
+    variant?: string;
+    description?: string;
+    manufacturer?: string;
+    active?: boolean;
+    reusable?: boolean;
+    minStage?: number | null;
+    maxStage?: number | null;
+    length?: number | null;
+    diameter?: number | null;
+    maidenFlight?: string | null;
+    launchCost?: number | null;
+    launchMass?: number | null;
+    leoCapacity?: number | null;
+    gtoCapacity?: number | null;
+    thrust?: number | null;
+    apogee?: number | null;
+    image?: string | null;
+    infoUrl?: string | null;
+    wikiUrl?: string | null;
+    totalLaunches?: number;
+    successfulLaunches?: number;
+    failedLaunches?: number;
+    pendingLaunches?: number;
+  };
+  agency?: {
+    type?: string;
+    country?: string;
+    description?: string;
+    administrator?: string;
+    foundingYear?: string;
+    logo?: string | null;
+    image?: string | null;
+    infoUrl?: string | null;
+    wikiUrl?: string | null;
+    totalLaunches?: number;
+    successfulLaunches?: number;
+    failedLaunches?: number;
+    pendingLaunches?: number;
+  };
+  padDetails?: {
+    description?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
+    mapUrl?: string | null;
+    mapImage?: string | null;
+    timezone?: string;
+    country?: string;
+    totalLaunches?: number;
+  };
+  programs?: Array<{
+    name: string;
+    description?: string;
+    image?: string | null;
+    infoUrl?: string | null;
+    wikiUrl?: string | null;
+  }>;
+  timeline?: Array<{ time: string; event: string; detail?: string }>;
+  updates?: Array<{ time?: string; comment: string; infoUrl?: string | null }>;
 };
 
 type ApiLaunch = {
@@ -28,24 +97,98 @@ type ApiLaunch = {
   window_start: string;
   window_end: string;
   status?: { id?: number; name?: string; abbrev?: string };
-  launch_service_provider?: { name?: string };
+  last_updated?: string;
+  weather_concerns?: string | null;
+  holdreason?: string | null;
+  failreason?: string | null;
+  hashtag?: string | null;
+  infographic?: string | null;
+  launch_service_provider?: {
+    name?: string;
+    type?: string;
+    country_code?: string;
+    description?: string;
+    administrator?: string;
+    founding_year?: string;
+    logo_url?: string | null;
+    image_url?: string | null;
+    info_url?: string | null;
+    wiki_url?: string | null;
+    total_launch_count?: number;
+    successful_launches?: number;
+    failed_launches?: number;
+    pending_launches?: number;
+  };
   rocket?: {
-    configuration?: { full_name?: string };
+    configuration?: {
+      id?: number;
+      full_name?: string;
+      family?: string;
+      variant?: string;
+      description?: string;
+      active?: boolean;
+      reusable?: boolean;
+      min_stage?: number | null;
+      max_stage?: number | null;
+      length?: number | null;
+      diameter?: number | null;
+      maiden_flight?: string | null;
+      launch_cost?: number | null;
+      launch_mass?: number | null;
+      leo_capacity?: number | null;
+      gto_capacity?: number | null;
+      to_thrust?: number | null;
+      apogee?: number | null;
+      image_url?: string | null;
+      info_url?: string | null;
+      wiki_url?: string | null;
+      total_launch_count?: number;
+      successful_launches?: number;
+      failed_launches?: number;
+      pending_launches?: number;
+      manufacturer?: { name?: string };
+    };
   };
   mission?: {
     name?: string;
     description?: string;
+    type?: string;
     orbit?: { name?: string };
   } | null;
   pad?: {
     name?: string;
-    location?: { name?: string };
+    description?: string | null;
+    latitude?: string | null;
+    longitude?: string | null;
+    map_url?: string | null;
+    map_image?: string | null;
+    country_code?: string;
+    total_launch_count?: number;
+    location?: { name?: string; timezone_name?: string };
   } | null;
   probability?: number | null;
   vid_urls?: ApiUrl[];
   vidURLs?: ApiUrl[];
   webcast_live?: boolean;
   infoURLs?: Array<string | ApiUrl>;
+  program?: Array<{
+    name?: string;
+    description?: string;
+    image_url?: string | null;
+    info_url?: string | null;
+    wiki_url?: string | null;
+  }>;
+  timeline?: Array<{
+    relative_time?: string;
+    type?: { name?: string; description?: string };
+    name?: string;
+    description?: string;
+  }>;
+  updates?: Array<{
+    created_on?: string;
+    comment?: string;
+    info_url?: string | null;
+  }>;
 };
 
 type ApiUrl = {
@@ -160,6 +303,11 @@ function mapLaunch(item: ApiLaunch, past = false): Launch {
   const streams = [...(item.vid_urls ?? item.vidURLs ?? [])].sort(
     (a, b) => (a.priority ?? 99) - (b.priority ?? 99),
   );
+  const config = item.rocket?.configuration;
+  const agency = item.launch_service_provider;
+  const streamUrls = streams
+    .map((stream) => externalUrl(stream))
+    .filter((url): url is string => Boolean(url));
 
   return {
     id: item.id,
@@ -176,12 +324,90 @@ function mapLaunch(item: ApiLaunch, past = false): Launch {
     status: statusOf(item, past),
     statusLabel: item.status?.name ?? (past ? "Completed" : "Scheduled"),
     orbit: item.mission?.orbit?.name ?? "Niet bekend",
-    webcast:
-      streams.map((stream) => externalUrl(stream)).find(Boolean) ?? null,
+    webcast: streamUrls[0] ?? null,
     infoUrl:
       item.infoURLs?.map((url) => externalUrl(url)).find(Boolean) ??
       providerHome(item.launch_service_provider?.name ?? ""),
     probability: item.probability ?? null,
+    lastUpdated: item.last_updated,
+    missionType: item.mission?.type,
+    weatherConcerns: item.weather_concerns ?? null,
+    holdReason: item.holdreason || null,
+    failReason: item.failreason || null,
+    hashtag: item.hashtag ?? null,
+    infographic: externalUrl(item.infographic),
+    streams: streamUrls,
+    rocketDetails: {
+      configurationId: config?.id,
+      family: config?.family,
+      variant: config?.variant,
+      description: config?.description,
+      manufacturer: config?.manufacturer?.name,
+      active: config?.active,
+      reusable: config?.reusable,
+      minStage: config?.min_stage,
+      maxStage: config?.max_stage,
+      length: config?.length,
+      diameter: config?.diameter,
+      maidenFlight: config?.maiden_flight,
+      launchCost: config?.launch_cost,
+      launchMass: config?.launch_mass,
+      leoCapacity: config?.leo_capacity,
+      gtoCapacity: config?.gto_capacity,
+      thrust: config?.to_thrust,
+      apogee: config?.apogee,
+      image: externalUrl(config?.image_url),
+      infoUrl: externalUrl(config?.info_url),
+      wikiUrl: externalUrl(config?.wiki_url),
+      totalLaunches: config?.total_launch_count,
+      successfulLaunches: config?.successful_launches,
+      failedLaunches: config?.failed_launches,
+      pendingLaunches: config?.pending_launches,
+    },
+    agency: {
+      type: agency?.type,
+      country: agency?.country_code,
+      description: agency?.description,
+      administrator: agency?.administrator,
+      foundingYear: agency?.founding_year,
+      logo: externalUrl(agency?.logo_url),
+      image: externalUrl(agency?.image_url),
+      infoUrl: externalUrl(agency?.info_url),
+      wikiUrl: externalUrl(agency?.wiki_url),
+      totalLaunches: agency?.total_launch_count,
+      successfulLaunches: agency?.successful_launches,
+      failedLaunches: agency?.failed_launches,
+      pendingLaunches: agency?.pending_launches,
+    },
+    padDetails: {
+      description: item.pad?.description,
+      latitude: item.pad?.latitude ? Number(item.pad.latitude) : null,
+      longitude: item.pad?.longitude ? Number(item.pad.longitude) : null,
+      mapUrl: externalUrl(item.pad?.map_url),
+      mapImage: externalUrl(item.pad?.map_image),
+      timezone: item.pad?.location?.timezone_name,
+      country: item.pad?.country_code,
+      totalLaunches: item.pad?.total_launch_count,
+    },
+    programs: (item.program ?? []).map((program) => ({
+      name: program.name ?? "Naamloos programma",
+      description: program.description,
+      image: externalUrl(program.image_url),
+      infoUrl: externalUrl(program.info_url),
+      wikiUrl: externalUrl(program.wiki_url),
+    })),
+    timeline: (item.timeline ?? []).map((event) => ({
+      time: event.relative_time ?? "T± onbekend",
+      event: event.type?.name ?? event.name ?? "Mission event",
+      detail: event.type?.description ?? event.description,
+    })),
+    updates: (item.updates ?? [])
+      .filter((update) => Boolean(update.comment))
+      .map((update) => ({
+        time: update.created_on,
+        comment: update.comment ?? "",
+        infoUrl: externalUrl(update.info_url),
+      })),
   };
 }
 
@@ -201,6 +427,34 @@ export async function getLaunch(id: string): Promise<Launch | null> {
     return mapLaunch((await response.json()) as ApiLaunch);
   } catch {
     return null;
+  }
+}
+
+export async function getRelatedLaunches(launch: Launch): Promise<Launch[]> {
+  const configId = launch.rocketDetails?.configurationId;
+  if (!configId) {
+    const all = await getLaunches();
+    return all.filter((item) => item.id !== launch.id && item.rocket === launch.rocket).slice(0, 12);
+  }
+
+  try {
+    const query = new URLSearchParams({
+      launcher_config__id: String(configId),
+      limit: "16",
+      ordering: "-net",
+      mode: "detailed",
+    });
+    const response = await fetch(`https://ll.thespacedevs.com/2.2.0/launch/?${query}`, {
+      next: { revalidate: 1800 },
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) return [];
+    const data = (await response.json()) as { results?: ApiLaunch[] };
+    return (data.results ?? [])
+      .map((item) => mapLaunch(item, new Date(item.net).getTime() < Date.now()))
+      .filter((item) => item.id !== launch.id);
+  } catch {
+    return [];
   }
 }
 
