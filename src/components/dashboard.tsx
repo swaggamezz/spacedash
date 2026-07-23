@@ -4,6 +4,7 @@ import type { Launch, LaunchStatus } from "@/lib/launches";
 import { rockets, starshipTimeline, type Rocket } from "@/lib/rockets";
 import { SpaceAssistant } from "@/components/space-assistant";
 import { TimezoneClock } from "@/components/timezone-clock";
+import { ActiveRefresh } from "@/components/active-refresh";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
@@ -63,6 +64,18 @@ function StatusPill({ status, label }: { status: LaunchStatus; label: string }) 
   return <span className={`status status-${status}`}><i />{label}</span>;
 }
 
+function isPending(status: LaunchStatus) {
+  return status === "upcoming" || status === "hold";
+}
+
+function missionResult(status: LaunchStatus) {
+  if (status === "success") return "GESLAAGD";
+  if (status === "failure") return "MISLUKT";
+  if (status === "cancelled") return "GEANNULEERD";
+  if (status === "aborted") return "POGING AFGEBROKEN";
+  return "UITGESTELD";
+}
+
 function RocketArt({ provider }: { provider: string }) {
   return (
     <div className="rocket-art" aria-hidden="true">
@@ -90,8 +103,8 @@ export function Dashboard({ launches }: { launches: Launch[] }) {
   const [active, setActive] = useState("Overzicht");
   const [query, setQuery] = useState("");
   const [selectedRocket, setSelectedRocket] = useState<Rocket | null>(null);
-  const upcoming = launches.filter((launch) => launch.status !== "success" && launch.status !== "failure");
-  const previous = launches.filter((launch) => launch.status === "success" || launch.status === "failure");
+  const upcoming = launches.filter((launch) => isPending(launch.status));
+  const previous = launches.filter((launch) => !isPending(launch.status));
   const featured = upcoming[0] ?? launches[0];
   const filtered = useMemo(() => {
     const source = active === "Historie" ? previous : active === "Launches" ? upcoming : launches;
@@ -107,6 +120,7 @@ export function Dashboard({ launches }: { launches: Launch[] }) {
 
   return (
     <div className="app-shell">
+      <ActiveRefresh />
       <aside className="sidebar">
         <a className="brand" href="#" onClick={() => setActive("Overzicht")}>
           <span className="brand-glyph">▲</span>
@@ -122,7 +136,7 @@ export function Dashboard({ launches }: { launches: Launch[] }) {
         </nav>
         <div className="sidebar-footer">
           <span><i /> LIVE DATA</span>
-          <small>Automatisch gesynchroniseerd</small>
+          <small>Actief: verversing per minuut</small>
           <small>Launch Library 2</small>
         </div>
       </aside>
@@ -195,7 +209,7 @@ export function Dashboard({ launches }: { launches: Launch[] }) {
             <section className="browser">
               <div className="filter-row">
                 <span>{active === "Historie" ? "AFGERONDE MISSIES" : "VOLLEDIGE DATABASE"}</span>
-                <span>Automatisch bijgewerkt · elke 5 min</span>
+                <span>Automatisch bijgewerkt · elke minuut bij actief bezoek</span>
               </div>
               <div className="launch-grid full-grid">
                 {filtered.map((launch) => <LaunchCard key={launch.id} launch={launch} />)}
@@ -356,7 +370,7 @@ function LaunchCard({ launch }: { launch: Launch }) {
           <span>{icons.calendar} {formatDate(launch.windowStart)}</span>
           <span>{icons.pin} {launch.location}</span>
         </div>
-        {launch.status === "upcoming" || launch.status === "hold" ? <Countdown date={launch.windowStart} /> : <span className="result">MISSIE {launch.status === "success" ? "GESLAAGD" : "MISLUKT"}</span>}
+        {isPending(launch.status) ? <Countdown date={launch.windowStart} /> : <span className={`result result-${launch.status}`}>MISSIE {missionResult(launch.status)}</span>}
         <span className="card-detail-link">Open volledige missie →</span>
       </div>
     </Link>
