@@ -1,4 +1,10 @@
-export type LaunchStatus = "upcoming" | "success" | "failure" | "hold";
+export type LaunchStatus =
+  | "upcoming"
+  | "success"
+  | "failure"
+  | "hold"
+  | "aborted"
+  | "cancelled";
 
 export type Launch = {
   id: string;
@@ -14,6 +20,7 @@ export type Launch = {
   pad: string;
   status: LaunchStatus;
   statusLabel: string;
+  statusDescription?: string;
   orbit: string;
   webcast: string | null;
   infoUrl: string | null;
@@ -26,6 +33,7 @@ export type Launch = {
   hashtag?: string | null;
   infographic?: string | null;
   streams?: string[];
+  webcastLive?: boolean;
   rocketDetails?: {
     configurationId?: number;
     family?: string;
@@ -96,7 +104,7 @@ type ApiLaunch = {
   net: string;
   window_start: string;
   window_end: string;
-  status?: { id?: number; name?: string; abbrev?: string };
+  status?: { id?: number; name?: string; abbrev?: string; description?: string };
   last_updated?: string;
   weather_concerns?: string | null;
   holdreason?: string | null;
@@ -260,10 +268,21 @@ const fallback: Launch[] = [
 
 function statusOf(item: ApiLaunch, past: boolean): LaunchStatus {
   const label = `${item.status?.name ?? ""} ${item.status?.abbrev ?? ""}`.toLowerCase();
+  if (label.includes("cancel") || label.includes("geannuleerd")) return "cancelled";
+  if (label.includes("abort")) return "aborted";
   if (label.includes("fail")) return "failure";
-  if (label.includes("hold") || label.includes("tbd") || label.includes("tbc")) return "hold";
+  if (
+    label.includes("hold") ||
+    label.includes("tbd") ||
+    label.includes("tbc") ||
+    label.includes("postpon") ||
+    label.includes("delay") ||
+    label.includes("scrub")
+  ) {
+    return "hold";
+  }
   if (label.includes("success") || (past && label.includes("complete"))) return "success";
-  return past ? "success" : "upcoming";
+  return past ? "hold" : "upcoming";
 }
 
 function externalUrl(value: unknown): string | null {
@@ -354,6 +373,7 @@ function mapLaunch(item: ApiLaunch, past = false): Launch {
     pad: item.pad?.name ?? "Lanceerplatform onbekend",
     status: statusOf(item, past),
     statusLabel: item.status?.name ?? (past ? "Completed" : "Scheduled"),
+    statusDescription: item.status?.description,
     orbit: item.mission?.orbit?.name ?? "Niet bekend",
     webcast: streamUrls[0] ?? null,
     infoUrl:
@@ -368,6 +388,7 @@ function mapLaunch(item: ApiLaunch, past = false): Launch {
     hashtag: item.hashtag ?? null,
     infographic: externalUrl(item.infographic),
     streams: streamUrls,
+    webcastLive: item.webcast_live ?? false,
     rocketDetails: {
       configurationId: config?.id,
       family: config?.family,
@@ -453,7 +474,7 @@ export async function getLaunch(id: string): Promise<Launch | null> {
     const response = await fetch(
       `https://ll.thespacedevs.com/2.2.0/launch/${encodeURIComponent(id)}/?mode=detailed`,
       {
-        next: { revalidate: 300 },
+        next: { revalidate: 60 },
         headers: { Accept: "application/json" },
       },
     );
@@ -501,7 +522,7 @@ async function fetchList(kind: "upcoming" | "previous", limit: number) {
   const response = await fetch(
     `https://ll.thespacedevs.com/2.2.0/launch/${kind}/?${query}`,
     {
-      next: { revalidate: kind === "upcoming" ? 300 : 3600 },
+      next: { revalidate: kind === "upcoming" ? 60 : 1800 },
       headers: { Accept: "application/json" },
     },
   );
