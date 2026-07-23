@@ -297,6 +297,37 @@ function providerHome(provider: string): string | null {
   return null;
 }
 
+function readableRelativeTime(value?: string) {
+  if (!value) return "T± onbekend";
+  if (/^T[+−-]/.test(value)) return value.replace("T-", "T−");
+  const match = value.match(/^(-)?P(?:(\d+)D)?T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/i);
+  if (!match) return value;
+  const [, before, days, hours, minutes, seconds] = match;
+  const totalHours = Number(days ?? 0) * 24 + Number(hours ?? 0);
+  return `T${before ? "−" : "+"}${String(totalHours).padStart(2, "0")}:${String(Number(minutes ?? 0)).padStart(2, "0")}:${String(Number(seconds ?? 0)).padStart(2, "0")}`;
+}
+
+function readableTimelineTitle(name?: string, description?: string) {
+  if (name && !/^mission event$/i.test(name)) return name;
+  const text = description?.toLowerCase() ?? "";
+  const stage = text.includes("first stage") ? " · trap 1" : text.includes("second stage") ? " · trap 2" : "";
+  if (text.includes("liquid oxygen")) return `LOX laden${stage}`;
+  if (text.includes("liquid methane")) return `Methaan laden${stage}`;
+  if (text.includes("propellant load")) return "Brandstof laden";
+  if (text.includes("engine chill")) return "Motoren voorkoelen";
+  if (text.includes("go for launch")) return "Go for launch";
+  if (text.includes("liftoff") || text.includes("lift off")) return "Liftoff";
+  if (text.includes("max q")) return "Max Q";
+  if (text.includes("separation")) return "Trapseparatie";
+  if (text.includes("engine cutoff") || text.includes("shutdown")) return "Motoruitschakeling";
+  if (text.includes("landing")) return "Landingsfase";
+  if (description) {
+    const sentence = description.split(/[.!?]/)[0].trim();
+    return sentence.length > 58 ? `${sentence.slice(0, 55)}…` : sentence;
+  }
+  return "Vluchtgebeurtenis";
+}
+
 function mapLaunch(item: ApiLaunch, past = false): Launch {
   const image =
     typeof item.image === "string" ? item.image : item.image?.image_url ?? null;
@@ -397,8 +428,11 @@ function mapLaunch(item: ApiLaunch, past = false): Launch {
       wikiUrl: externalUrl(program.wiki_url),
     })),
     timeline: (item.timeline ?? []).map((event) => ({
-      time: event.relative_time ?? "T± onbekend",
-      event: event.type?.name ?? event.name ?? "Mission event",
+      time: readableRelativeTime(event.relative_time),
+      event: readableTimelineTitle(
+        event.type?.name ?? event.name,
+        event.type?.description ?? event.description,
+      ),
       detail: event.type?.description ?? event.description,
     })),
     updates: (item.updates ?? [])
