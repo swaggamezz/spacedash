@@ -62,6 +62,24 @@ function Countdown({ date, large = false }: { date: string; large?: boolean }) {
   );
 }
 
+function missionClockValue(date: string) {
+  const difference = Date.now() - new Date(date).getTime();
+  const absolute = Math.abs(difference);
+  const hours = Math.floor(absolute / 3_600_000);
+  const minutes = Math.floor((absolute / 60_000) % 60);
+  const seconds = Math.floor((absolute / 1000) % 60);
+  return `T${difference >= 0 ? "+" : "−"}${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function StarshipMissionClock({ date }: { date: string }) {
+  const [value, setValue] = useState(() => missionClockValue(date));
+  useEffect(() => {
+    const timer = window.setInterval(() => setValue(missionClockValue(date)), 1000);
+    return () => window.clearInterval(timer);
+  }, [date]);
+  return <strong>{value}</strong>;
+}
+
 function StatusPill({ status, label }: { status: LaunchStatus; label: string }) {
   return <span className={`status status-${status}`}><i />{label}</span>;
 }
@@ -298,6 +316,7 @@ function StarshipCenter({ launches }: { launches: Launch[] }) {
   const starship = rockets[0];
   const missions = launches.filter((launch) => /starship|super heavy/i.test(`${launch.name} ${launch.rocket}`));
   const next = missions.find((launch) => launch.status === "upcoming" || launch.status === "hold");
+  const tracked = next ?? missions[0];
   return (
     <section className="starship-center">
       <div className="starship-masthead">
@@ -321,6 +340,68 @@ function StarshipCenter({ launches }: { launches: Launch[] }) {
         <div><span>RAPTORS</span><strong>39</strong><small>booster + ship</small></div>
         <div><span>LEO PAYLOAD</span><strong>100+</strong><small>ton, doel</small></div>
       </div>
+
+      <section className="starship-live-panel">
+        <div className="starship-live-head">
+          <div>
+            <span>STARSHIP MISSION DATA</span>
+            <h3>{tracked ? tracked.name : "Wachten op volgende vlucht"}</h3>
+            <p>Live mission status uit Launch Library en de officiële SpaceX-uitzending.</p>
+          </div>
+          {tracked && (
+            <div className="starship-live-actions">
+              <StatusPill status={tracked.status} label={tracked.webcastLive ? "Nu live" : tracked.statusLabel} />
+              <Link href={`/launch/${encodeURIComponent(tracked.id)}/watch`}>Open live Watch Center →</Link>
+            </div>
+          )}
+        </div>
+        <div className="starship-telemetry-grid">
+          <div className="available">
+            <span>MISSION CLOCK</span>
+            {tracked ? <StarshipMissionClock date={tracked.windowStart} /> : <strong>—</strong>}
+            <small>Gebaseerd op actuele T-0</small>
+          </div>
+          <div className="available">
+            <span>FLIGHT STATUS</span>
+            <strong>{tracked?.statusLabel ?? "Niet gepland"}</strong>
+            <small>Automatisch gecontroleerd</small>
+          </div>
+          <div className={tracked?.webcastLive ? "available" : ""}>
+            <span>VIDEOFEED</span>
+            <strong>{tracked?.webcastLive ? "LIVE" : tracked?.webcast ? "GEREED" : "WACHTEN"}</strong>
+            <small>Officiële of gekoppelde bron</small>
+          </div>
+          <div>
+            <span>HOOGTE</span>
+            <strong>VIA STREAM</strong>
+            <small>Geen publieke data-API</small>
+          </div>
+          <div>
+            <span>SNELHEID</span>
+            <strong>VIA STREAM</strong>
+            <small>Geen publieke data-API</small>
+          </div>
+          <div>
+            <span>RAPTOR STATUS</span>
+            <strong>NIET PUBLIEK</strong>
+            <small>Alleen zichtbaar in webcast</small>
+          </div>
+          <div>
+            <span>LAUNCH COMMS</span>
+            <strong>{tracked?.webcast ? "AUDIOFEED" : "WACHTEN"}</strong>
+            <small>SpaceX-uitzending</small>
+          </div>
+          <div className="available">
+            <span>PAD</span>
+            <strong>{tracked?.pad ?? "Starbase"}</strong>
+            <small>{tracked?.location ?? "Texas, USA"}</small>
+          </div>
+        </div>
+        <p className="starship-telemetry-note">
+          SpaceX publiceert geen officiële machine-readable API voor live hoogte, snelheid, motorstatus of interne communicatie.
+          Zodra zo’n betrouwbare bron beschikbaar is kan SpaceDash die waarden hier automatisch tonen; tot die tijd vind je de echte overlay in de live video.
+        </p>
+      </section>
 
       <div className="starship-columns">
         <article className="tech-panel">
