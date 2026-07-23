@@ -103,11 +103,20 @@ export function Dashboard({ launches }: { launches: Launch[] }) {
   const [active, setActive] = useState("Overzicht");
   const [query, setQuery] = useState("");
   const [selectedRocket, setSelectedRocket] = useState<Rocket | null>(null);
+  const [historyResults, setHistoryResults] = useState<Launch[]>([]);
+  const [historyResultQuery, setHistoryResultQuery] = useState("");
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
   const upcoming = launches.filter((launch) => isPending(launch.status));
   const previous = launches.filter((launch) => !isPending(launch.status));
   const featured = upcoming[0] ?? launches[0];
+  const normalizedQuery = query.trim();
+  const remoteHistoryActive = active === "Historie" && normalizedQuery.length >= 2;
+  const remoteHistoryReady = remoteHistoryActive && historyResultQuery === normalizedQuery;
   const filtered = useMemo(() => {
-    const source = active === "Historie" ? previous : active === "Launches" ? upcoming : launches;
+    const source = active === "Historie"
+      ? remoteHistoryReady ? historyResults : previous
+      : active === "Launches" ? upcoming : launches;
     if (!query.trim()) return source;
     const needle = query.toLowerCase();
     return source.filter((item) =>
@@ -116,7 +125,36 @@ export function Dashboard({ launches }: { launches: Launch[] }) {
         .toLowerCase()
         .includes(needle),
     );
-  }, [active, launches, previous, query, upcoming]);
+  }, [active, historyResults, launches, previous, query, remoteHistoryReady, upcoming]);
+
+  useEffect(() => {
+    if (!remoteHistoryActive) return;
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setHistoryLoading(true);
+      setHistoryError("");
+      try {
+        const response = await fetch(`/api/launches/search?q=${encodeURIComponent(normalizedQuery)}`, {
+          signal: controller.signal,
+        });
+        const data = (await response.json()) as { launches?: Launch[]; error?: string };
+        if (!response.ok) throw new Error(data.error ?? "Historisch zoeken mislukt.");
+        setHistoryResults(data.launches ?? []);
+        setHistoryResultQuery(normalizedQuery);
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setHistoryError(error instanceof Error ? error.message : "Historisch zoeken mislukt.");
+      } finally {
+        if (!controller.signal.aborted) setHistoryLoading(false);
+      }
+    }, 350);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [normalizedQuery, remoteHistoryActive]);
 
   return (
     <div className="app-shell">
@@ -146,7 +184,11 @@ export function Dashboard({ launches }: { launches: Launch[] }) {
           <button className="mobile-logo" onClick={() => setActive("Overzicht")}>▲</button>
           <div className="search">
             <span>{icons.search}</span>
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Zoek launches, raketten of organisaties..." />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={active === "Historie" ? "Zoek in alle historische launches..." : "Zoek launches, raketten of organisaties..."}
+            />
             <kbd>⌘ K</kbd>
           </div>
           <TimezoneClock />
@@ -175,7 +217,7 @@ export function Dashboard({ launches }: { launches: Launch[] }) {
                   <div className="hero-bottom">
                     <Countdown date={featured.windowStart} large />
                     <div className="hero-actions">
-                      {featured.webcast && <a className="primary" href={featured.webcast} target="_blank" rel="noreferrer">{icons.play} Livestream</a>}
+                      {featured.webcast && <Link className="primary" href={`/launch/${encodeURIComponent(featured.id)}/watch`}>{icons.play} Watch center</Link>}
                       <Link href={`/launch/${encodeURIComponent(featured.id)}`}>Open missie {icons.arrow}</Link>
                     </div>
                   </div>
@@ -208,13 +250,19 @@ export function Dashboard({ launches }: { launches: Launch[] }) {
           {active !== "Overzicht" && active !== "Starship" && active !== "Raketten" && (
             <section className="browser">
               <div className="filter-row">
-                <span>{active === "Historie" ? "AFGERONDE MISSIES" : "VOLLEDIGE DATABASE"}</span>
+                <span>
+                  {active === "Historie"
+                    ? remoteHistoryActive ? "ZOEKEN IN 7.500+ HISTORISCHE LAUNCHES" : "RECENTE AFGERONDE MISSIES"
+                    : "VOLLEDIGE DATABASE"}
+                </span>
                 <span>Automatisch bijgewerkt · elke minuut bij actief bezoek</span>
               </div>
+              {historyLoading && remoteHistoryActive && <div className="history-search-state"><i /> Historische database doorzoeken…</div>}
+              {historyError && remoteHistoryActive && <div className="history-search-state error">{historyError}</div>}
               <div className="launch-grid full-grid">
                 {filtered.map((launch) => <LaunchCard key={launch.id} launch={launch} />)}
               </div>
-              {!filtered.length && <div className="empty">Geen resultaten voor “{query}”.</div>}
+              {!filtered.length && !historyLoading && <div className="empty">Geen resultaten voor “{query}”. Probeer bijvoorbeeld “Starship”, “Apollo” of “Falcon 9”.</div>}
             </section>
           )}
         </div>
