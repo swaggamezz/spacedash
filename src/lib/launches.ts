@@ -545,6 +545,28 @@ export async function getRelatedLaunches(launch: Launch): Promise<Launch[]> {
   }
 }
 
+export async function getAgencyLaunches(agencyId: number, limit = 12): Promise<Launch[]> {
+  if (!Number.isInteger(agencyId) || agencyId < 1) return [];
+  try {
+    const query = new URLSearchParams({
+      launch_service_provider__id: String(agencyId),
+      limit: String(Math.min(Math.max(limit, 1), 24)),
+      ordering: "-net",
+      mode: "detailed",
+    });
+    const response = await fetch(`https://ll.thespacedevs.com/2.2.0/launch/?${query}`, {
+      next: { revalidate: 300 },
+      signal: AbortSignal.timeout(12_000),
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) return [];
+    const data = (await response.json()) as { results?: ApiLaunch[] };
+    return (data.results ?? []).map((item) => mapLaunch(item, new Date(item.net).getTime() < Date.now()));
+  } catch {
+    return [];
+  }
+}
+
 export async function searchHistoricalLaunches(search: string, limit = 30): Promise<Launch[]> {
   const normalized = search.trim().slice(0, 80);
   if (normalized.length < 2) return [];
