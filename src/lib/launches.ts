@@ -6,6 +6,12 @@ export type LaunchStatus =
   | "aborted"
   | "cancelled";
 
+export type StreamSource = {
+  url: string;
+  title: string;
+  priority: number;
+};
+
 export type Launch = {
   id: string;
   name: string;
@@ -33,6 +39,7 @@ export type Launch = {
   hashtag?: string | null;
   infographic?: string | null;
   streams?: string[];
+  streamSources?: StreamSource[];
   webcastLive?: boolean;
   rocketDetails?: {
     configurationId?: number;
@@ -316,6 +323,18 @@ function providerHome(provider: string): string | null {
   return null;
 }
 
+function streamTitle(url: string, supplied?: string) {
+  if (supplied?.trim()) return supplied.trim();
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, "");
+    if (host.includes("youtube.com") || host.includes("youtu.be")) return "YouTube-feed";
+    if (host.includes("x.com") || host.includes("twitter.com")) return "SpaceX-feed op X";
+    return host;
+  } catch {
+    return "Videofeed";
+  }
+}
+
 function readableRelativeTime(value?: string) {
   if (!value) return "T± onbekend";
   if (/^T[+−-]/.test(value)) return value.replace("T-", "T−");
@@ -355,9 +374,19 @@ function mapLaunch(item: ApiLaunch, past = false): Launch {
   );
   const config = item.rocket?.configuration;
   const agency = item.launch_service_provider;
-  const streamUrls = streams
-    .map((stream) => externalUrl(stream))
-    .filter((url): url is string => Boolean(url));
+  const streamSources = streams
+    .map((stream) => {
+      const url = externalUrl(stream);
+      if (!url) return null;
+      return {
+        url,
+        title: streamTitle(url, stream.title),
+        priority: stream.priority ?? 99,
+      };
+    })
+    .filter((source): source is StreamSource => Boolean(source))
+    .filter((source, index, all) => all.findIndex((item) => item.url === source.url) === index);
+  const streamUrls = streamSources.map((stream) => stream.url);
 
   return {
     id: item.id,
@@ -388,6 +417,7 @@ function mapLaunch(item: ApiLaunch, past = false): Launch {
     hashtag: item.hashtag ?? null,
     infographic: externalUrl(item.infographic),
     streams: streamUrls,
+    streamSources,
     webcastLive: item.webcast_live ?? false,
     rocketDetails: {
       configurationId: config?.id,
@@ -475,6 +505,7 @@ export async function getLaunch(id: string): Promise<Launch | null> {
       `https://ll.thespacedevs.com/2.2.0/launch/${encodeURIComponent(id)}/?mode=detailed`,
       {
         next: { revalidate: 60 },
+        signal: AbortSignal.timeout(12_000),
         headers: { Accept: "application/json" },
       },
     );
@@ -501,6 +532,7 @@ export async function getRelatedLaunches(launch: Launch): Promise<Launch[]> {
     });
     const response = await fetch(`https://ll.thespacedevs.com/2.2.0/launch/?${query}`, {
       next: { revalidate: 1800 },
+      signal: AbortSignal.timeout(12_000),
       headers: { Accept: "application/json" },
     });
     if (!response.ok) return [];
@@ -513,6 +545,30 @@ export async function getRelatedLaunches(launch: Launch): Promise<Launch[]> {
   }
 }
 
+export async function searchHistoricalLaunches(search: string, limit = 30): Promise<Launch[]> {
+  const normalized = search.trim().slice(0, 80);
+  if (normalized.length < 2) return [];
+
+  const query = new URLSearchParams({
+    search: normalized,
+    limit: String(Math.min(Math.max(limit, 1), 40)),
+    ordering: "-net",
+    mode: "normal",
+  });
+  const response = await fetch(
+    `https://ll.thespacedevs.com/2.2.0/launch/previous/?${query}`,
+    {
+      next: { revalidate: 300 },
+      signal: AbortSignal.timeout(12_000),
+      headers: { Accept: "application/json" },
+    },
+  );
+
+  if (!response.ok) throw new Error(`Launch Library search returned ${response.status}`);
+  const data = (await response.json()) as { results?: ApiLaunch[] };
+  return (data.results ?? []).map((item) => mapLaunch(item, true));
+}
+
 async function fetchList(kind: "upcoming" | "previous", limit: number) {
   const query = new URLSearchParams({
     limit: String(limit),
@@ -523,6 +579,7 @@ async function fetchList(kind: "upcoming" | "previous", limit: number) {
     `https://ll.thespacedevs.com/2.2.0/launch/${kind}/?${query}`,
     {
       next: { revalidate: kind === "upcoming" ? 60 : 1800 },
+      signal: AbortSignal.timeout(12_000),
       headers: { Accept: "application/json" },
     },
   );
