@@ -3,6 +3,7 @@
 import type { Launch, LaunchStatus } from "@/lib/launches";
 import { rockets, starshipTimeline, type Rocket } from "@/lib/rockets";
 import { SpaceAssistant } from "@/components/space-assistant";
+import { TimezoneClock } from "@/components/timezone-clock";
 import { useEffect, useMemo, useState } from "react";
 
 const icons = {
@@ -134,7 +135,7 @@ export function Dashboard({ launches }: { launches: Launch[] }) {
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Zoek launches, raketten of organisaties..." />
             <kbd>⌘ K</kbd>
           </div>
-          <div className="utc"><span>UTC</span><strong>{new Date().toISOString().slice(11, 19)}</strong></div>
+          <TimezoneClock />
           <button className="avatar">TV</button>
         </header>
 
@@ -357,6 +358,9 @@ function LaunchCard({ launch, onOpen }: { launch: Launch; onOpen: (launch: Launc
           <span>{icons.pin} {launch.location}</span>
         </div>
         {launch.status === "upcoming" || launch.status === "hold" ? <Countdown date={launch.windowStart} /> : <span className="result">MISSIE {launch.status === "success" ? "GESLAAGD" : "MISLUKT"}</span>}
+        <a className="card-detail-link" href={`/launch/${encodeURIComponent(launch.id)}`} onClick={(event) => event.stopPropagation()}>
+          Volledige missiepagina →
+        </a>
       </div>
     </article>
   );
@@ -411,8 +415,9 @@ function MissionDrawer({ launch, onClose }: { launch: Launch; onClose: () => voi
           </div>
         )}
         <div className="drawer-actions">
+          <a className="primary" href={`/launch/${encodeURIComponent(launch.id)}`}>Open volledige missiepagina {icons.arrow}</a>
           {launch.webcast && <a className="primary" href={launch.webcast} target="_blank" rel="noreferrer">{icons.play} Open livestream</a>}
-          {launch.infoUrl && <a href={launch.infoUrl} target="_blank" rel="noreferrer">Officiële missiepagina {icons.arrow}</a>}
+          {launch.infoUrl && <a href={launch.infoUrl} target="_blank" rel="noreferrer">Website lanceerorganisatie {icons.arrow}</a>}
         </div>
       </aside>
     </div>
