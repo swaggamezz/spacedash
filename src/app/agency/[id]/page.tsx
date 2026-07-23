@@ -28,11 +28,11 @@ export default async function AgencyRoute({ params }: Props) {
   const { id } = await params;
   const agencyId = Number(id);
   if (!Number.isInteger(agencyId)) notFound();
-  const [agency, rockets, launches] = await Promise.all([
-    getAgency(agencyId),
-    getAgencyRockets(agencyId),
+  const agency = await getAgency(agencyId);
+  if (!agency) notFound();
+  const [rockets, launches] = await Promise.all([
+    getAgencyRockets(agency.name),
     getAgencyLaunches(agencyId),
   ]);
-  if (!agency) notFound();
   return <AgencyPage agency={agency} rockets={rockets} launches={launches} />;
 }
