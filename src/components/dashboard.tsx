@@ -6,6 +6,7 @@ import { rockets, starshipTimeline, type Rocket } from "@/lib/rockets";
 import { SpaceAssistant } from "@/components/space-assistant";
 import { TimezoneClock } from "@/components/timezone-clock";
 import { ActiveRefresh } from "@/components/active-refresh";
+import { AgencyDatabase } from "@/components/agency-database";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
@@ -201,7 +202,15 @@ export function Dashboard({ launches }: { launches: Launch[] }) {
           <div className="page-title">
             <div>
               <h1>{active === "Overzicht" ? "Goedemiddag, Teun." : active}</h1>
-              <p>{active === "Overzicht" ? "Alles wat de aarde verlaat, op één plek." : `${filtered.length} missies gevonden in de automatische database.`}</p>
+              <p>
+                {active === "Overzicht"
+                  ? "Alles wat de aarde verlaat, op één plek."
+                  : active === "Raketten"
+                    ? "Actieve en historische lanceervoertuigen in één technisch archief."
+                    : active === "Agentschappen"
+                      ? "Ontdek de organisaties achter ruimtevaartmissies over de hele wereld."
+                      : `${filtered.length} missies gevonden in de automatische database.`}
+              </p>
             </div>
             <span className="live-badge"><i /> SYSTEMEN OPERATIONEEL</span>
           </div>
@@ -248,7 +257,9 @@ export function Dashboard({ launches }: { launches: Launch[] }) {
             <RocketDatabase onOpen={setSelectedRocket} />
           )}
 
-          {active !== "Overzicht" && active !== "Starship" && active !== "Raketten" && (
+          {active === "Agentschappen" && <AgencyDatabase />}
+
+          {active !== "Overzicht" && active !== "Starship" && active !== "Raketten" && active !== "Agentschappen" && (
             <section className="browser">
               <div className="filter-row">
                 <span>
