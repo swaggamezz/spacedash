@@ -171,6 +171,10 @@ export function MissionPage({ launch, related }: { launch: Launch; related: Laun
   }, [isStarship, launch.timeline]);
   const rocket = launch.rocketDetails;
 
+  useEffect(() => {
+    if (!window.location.hash) window.scrollTo({ top: 0, behavior: "auto" });
+  }, [launch.id]);
+
   return (
     <main className="mission-page">
       <nav className="mission-nav">
