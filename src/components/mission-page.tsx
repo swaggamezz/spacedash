@@ -221,7 +221,7 @@ export function MissionPage({ launch, related }: { launch: Launch; related: Laun
         <Link href="/"><span>▲</span> SPACE<strong>DASH</strong></Link>
         <Link href="/">← Mission control</Link>
         <div className="mission-nav-links">
-          <a href="#mission">Missie</a><a href="#rocket">Raket</a><a href="#timeline">Tijdlijn</a><a href="#related">Vluchten</a>
+          <a href="#mission">Missie</a><a href="#rocket">Raket</a><a href="#timeline">Tijdlijn</a><Link href={`/launch/${encodeURIComponent(launch.id)}/watch`}>Watch center</Link>
         </div>
         <TimezoneClock />
       </nav>
@@ -339,6 +339,9 @@ export function MissionPage({ launch, related }: { launch: Launch; related: Laun
             {video ? <iframe src={`https://www.youtube-nocookie.com/embed/${video}?rel=0`} title={`Officiële uitzending van ${launch.name}`} allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /> : <div className="stream-placeholder"><span>▶</span><p>{streamMessage(launch)}</p></div>}
             {streams.length > 1 && <div className="stream-tabs">{streams.map((stream, index) => <button className={selectedStream === stream ? "active" : ""} onClick={() => setActiveStream(stream)} key={stream}>FEED {index + 1}</button>)}</div>}
             <div className="watch-actions">
+              <Link className="primary" href={`/launch/${encodeURIComponent(launch.id)}/watch`}>
+                {streams.length > 1 ? `Open multi-view · ${streams.length} feeds →` : "Open volledig Watch Center →"}
+              </Link>
               {selectedStream && <a className="primary" href={selectedStream} target="_blank" rel="noreferrer">Open officiële uitzending ↗</a>}
               {launch.infoUrl && <a href={launch.infoUrl} target="_blank" rel="noreferrer">Website lanceerorganisatie ↗</a>}
               {launch.infographic && <a href={launch.infographic} target="_blank" rel="noreferrer">Missie-infographic ↗</a>}
