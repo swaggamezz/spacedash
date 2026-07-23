@@ -6,7 +6,7 @@ export async function GET(request: Request) {
   const search = searchParams.get("q") ?? "";
 
   try {
-    const data = await getAgencyCatalog(Number.isFinite(offset) ? offset : 0, 48, search);
+    const data = await getAgencyCatalog(Number.isFinite(offset) ? offset : 0, 12, search);
     return Response.json(data, {
       headers: {
         "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
