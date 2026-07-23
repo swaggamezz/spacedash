@@ -113,3 +113,46 @@ export async function getRocketCatalog(offset = 0, limit = 60) {
     rockets: (data.results ?? []).map(mapRocket),
   };
 }
+
+export async function getRocket(id: number): Promise<CatalogRocket | null> {
+  if (!Number.isInteger(id) || id < 1) return null;
+  try {
+    const response = await fetch(
+      `https://ll.thespacedevs.com/2.2.0/config/launcher/${id}/?mode=detailed`,
+      {
+        next: { revalidate: 3600 },
+        signal: AbortSignal.timeout(12_000),
+        headers: { Accept: "application/json" },
+      },
+    );
+    if (!response.ok) return null;
+    return mapRocket((await response.json()) as ApiRocket);
+  } catch {
+    return null;
+  }
+}
+
+export async function getAgencyRockets(agencyId: number, limit = 16): Promise<CatalogRocket[]> {
+  if (!Number.isInteger(agencyId) || agencyId < 1) return [];
+  try {
+    const query = new URLSearchParams({
+      manufacturer__id: String(agencyId),
+      limit: String(Math.min(Math.max(limit, 1), 32)),
+      ordering: "-total_launch_count",
+      mode: "detailed",
+    });
+    const response = await fetch(
+      `https://ll.thespacedevs.com/2.2.0/config/launcher/?${query}`,
+      {
+        next: { revalidate: 3600 },
+        signal: AbortSignal.timeout(12_000),
+        headers: { Accept: "application/json" },
+      },
+    );
+    if (!response.ok) return [];
+    const data = (await response.json()) as { results?: ApiRocket[] };
+    return (data.results ?? []).map(mapRocket);
+  } catch {
+    return [];
+  }
+}
