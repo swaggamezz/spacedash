@@ -87,7 +87,7 @@ function mapAgency(item: ApiAgency): SpaceAgency {
   };
 }
 
-export async function getAgencyCatalog(offset = 0, limit = 48, search = "") {
+export async function getAgencyCatalog(offset = 0, limit = 12, search = "") {
   const safeOffset = Math.max(0, offset);
   const safeLimit = Math.min(Math.max(limit, 1), 60);
   const query = new URLSearchParams({
@@ -111,4 +111,22 @@ export async function getAgencyCatalog(offset = 0, limit = 48, search = "") {
     count: data.count ?? 0,
     agencies: (data.results ?? []).map(mapAgency),
   };
+}
+
+export async function getAgency(id: number): Promise<SpaceAgency | null> {
+  if (!Number.isInteger(id) || id < 1) return null;
+  try {
+    const response = await fetch(
+      `https://ll.thespacedevs.com/2.2.0/agencies/${id}/?mode=detailed`,
+      {
+        next: { revalidate: 3600 },
+        signal: AbortSignal.timeout(12_000),
+        headers: { Accept: "application/json" },
+      },
+    );
+    if (!response.ok) return null;
+    return mapAgency((await response.json()) as ApiAgency);
+  } catch {
+    return null;
+  }
 }
