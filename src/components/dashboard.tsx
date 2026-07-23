@@ -1,6 +1,7 @@
 "use client";
 
 import type { Launch, LaunchStatus } from "@/lib/launches";
+import type { CatalogRocket } from "@/lib/launch-vehicles";
 import { rockets, starshipTimeline, type Rocket } from "@/lib/rockets";
 import { SpaceAssistant } from "@/components/space-assistant";
 import { TimezoneClock } from "@/components/timezone-clock";
@@ -217,7 +218,7 @@ export function Dashboard({ launches }: { launches: Launch[] }) {
                   <div className="hero-bottom">
                     <Countdown date={featured.windowStart} large />
                     <div className="hero-actions">
-                      {featured.webcast && <Link className="primary" href={`/launch/${encodeURIComponent(featured.id)}/watch`}>{icons.play} Watch center</Link>}
+                      <Link className="primary" href={`/launch/${encodeURIComponent(featured.id)}/watch`}>{icons.play} Watch center</Link>
                       <Link href={`/launch/${encodeURIComponent(featured.id)}`}>Open missie {icons.arrow}</Link>
                     </div>
                   </div>
@@ -385,43 +386,195 @@ function StarshipDiagram() {
   );
 }
 
+type CatalogFilter = "all" | "active" | "retired";
+
+function catalogNumber(value: number | null, unit = "") {
+  if (value === null) return "—";
+  return `${new Intl.NumberFormat("nl-NL").format(value)}${unit}`;
+}
+
 function RocketDatabase({ onOpen }: { onOpen: (rocket: Rocket) => void }) {
+  const [catalog, setCatalog] = useState<CatalogRocket[]>([]);
+  const [total, setTotal] = useState(0);
+  const [catalogQuery, setCatalogQuery] = useState("");
+  const [filter, setFilter] = useState<CatalogFilter>("all");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [selected, setSelected] = useState<CatalogRocket | null>(null);
+
+  async function loadCatalog(offset: number, signal?: AbortSignal) {
+    setLoading(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/rockets?offset=${offset}`, { signal });
+      const data = (await response.json()) as { count?: number; rockets?: CatalogRocket[]; error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Raketcatalogus laden mislukt.");
+      setCatalog((current) => offset === 0 ? data.rockets ?? [] : [...current, ...(data.rockets ?? [])]);
+      setTotal(data.count ?? 0);
+    } catch (loadError) {
+      if (loadError instanceof DOMException && loadError.name === "AbortError") return;
+      setError(loadError instanceof Error ? loadError.message : "Raketcatalogus laden mislukt.");
+    } finally {
+      if (!signal?.aborted) setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => void loadCatalog(0, controller.signal), 0);
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, []);
+
+  const visible = useMemo(() => {
+    const needle = catalogQuery.trim().toLowerCase();
+    return catalog.filter((rocket) => {
+      const matchesStatus =
+        filter === "all" ||
+        (filter === "active" && rocket.active === true) ||
+        (filter === "retired" && rocket.active === false);
+      const matchesQuery =
+        !needle ||
+        [rocket.name, rocket.family, rocket.manufacturer, rocket.country]
+          .join(" ")
+          .toLowerCase()
+          .includes(needle);
+      return matchesStatus && matchesQuery;
+    });
+  }, [catalog, catalogQuery, filter]);
+
   return (
-    <section className="rocket-database">
-      <div className="filter-row"><span>{rockets.length} RAKETSYSTEMEN</span><span>Handmatig gecontroleerde kernspecificaties</span></div>
-      <div className="rocket-table">
-        <div className="rocket-table-head"><span>VOERTUIG</span><span>STATUS</span><span>HOOGTE</span><span>PAYLOAD LEO</span><span>HERGEBRUIK</span><span /></div>
-        {rockets.map((rocket, index) => (
-          <button key={rocket.id} onClick={() => onOpen(rocket)}>
-            <span className="rocket-name"><i>{String(index + 1).padStart(2, "0")}</i><b>{rocket.name}</b><small>{rocket.maker}</small></span>
-            <span><em className={rocket.status.includes("Operationeel") ? "operational" : ""} />{rocket.status}</span>
-            <span>{rocket.height}</span>
-            <span>{rocket.payloadLeo}</span>
-            <span>{rocket.reusable}</span>
-            <span>→</span>
+    <>
+      <section className="rocket-database">
+        <div className="catalog-heading">
+          <div><span>AUTOMATISCHE DATABASE</span><h2>Raketarchief</h2><p>Actieve, historische en experimentele lanceervoertuigen uit de volledige openbare catalogus.</p></div>
+          <strong>{total || "532"}<small> configuraties</small></strong>
+        </div>
+
+        <div className="catalog-controls">
+          <label><span>⌕</span><input value={catalogQuery} onChange={(event) => setCatalogQuery(event.target.value)} placeholder="Zoek Saturn, Shuttle, Proton, Ariane…" /></label>
+          <div>
+            {([
+              ["all", "Alle"],
+              ["active", "Actief"],
+              ["retired", "Historisch"],
+            ] as const).map(([value, label]) => (
+              <button aria-pressed={filter === value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)} key={value}>{label}</button>
+            ))}
+          </div>
+        </div>
+
+        {error && <div className="catalog-state error">{error} De zes gecontroleerde dossiers hieronder blijven beschikbaar.</div>}
+        {loading && !catalog.length && <div className="catalog-state"><i /> Raketarchief laden…</div>}
+        <div className="catalog-grid">
+          {visible.map((rocket) => (
+            <button className="catalog-card" onClick={() => setSelected(rocket)} key={rocket.id}>
+              <div className="catalog-card-art" style={rocket.image ? { backgroundImage: `linear-gradient(to top,#090b1c 0%,transparent 75%),url("${rocket.image}")` } : undefined}>
+                <span className={rocket.active === true ? "active" : rocket.active === false ? "retired" : "unknown"}><i /> {rocket.active === true ? "ACTIEF" : rocket.active === false ? "HISTORISCH" : "STATUS ONBEKEND"}</span>
+                {!rocket.image && <b>▲</b>}
+              </div>
+              <div className="catalog-card-copy">
+                <small>{rocket.family} · {rocket.country}</small>
+                <strong>{rocket.name}</strong>
+                <span>{rocket.manufacturer}</span>
+                <dl>
+                  <div><dt>Vluchten</dt><dd>{rocket.totalLaunches}</dd></div>
+                  <div><dt>Eerste vlucht</dt><dd>{rocket.maidenFlight?.slice(0, 4) ?? "—"}</dd></div>
+                  <div><dt>LEO</dt><dd>{catalogNumber(rocket.leoCapacity, " kg")}</dd></div>
+                </dl>
+              </div>
+            </button>
+          ))}
+        </div>
+        {!loading && !visible.length && !error && <div className="catalog-state">Geen geladen raketten voldoen aan deze zoekopdracht of dit filter.</div>}
+        {catalog.length < total && (
+          <button className="catalog-more" disabled={loading} onClick={() => void loadCatalog(catalog.length)}>
+            {loading ? "VOLGENDE PAGINA LADEN…" : `MEER RAKETTEN LADEN · ${catalog.length} VAN ${total}`}
           </button>
-        ))}
-      </div>
-    </section>
+        )}
+
+        <div className="filter-row curated-heading"><span>UITGELICHTE TECHNISCHE DOSSIERS</span><span>{rockets.length} handmatig gecontroleerde systemen</span></div>
+        <div className="rocket-table">
+          <div className="rocket-table-head"><span>VOERTUIG</span><span>STATUS</span><span>HOOGTE</span><span>PAYLOAD LEO</span><span>HERGEBRUIK</span><span /></div>
+          {rockets.map((rocket, index) => (
+            <button key={rocket.id} onClick={() => onOpen(rocket)}>
+              <span className="rocket-name"><i>{String(index + 1).padStart(2, "0")}</i><b>{rocket.name}</b><small>{rocket.maker}</small></span>
+              <span><em className={rocket.status.includes("Operationeel") ? "operational" : ""} />{rocket.status}</span>
+              <span>{rocket.height}</span>
+              <span>{rocket.payloadLeo}</span>
+              <span>{rocket.reusable}</span>
+              <span>→</span>
+            </button>
+          ))}
+        </div>
+      </section>
+      {selected && <CatalogRocketDrawer rocket={selected} onClose={() => setSelected(null)} />}
+    </>
+  );
+}
+
+function CatalogRocketDrawer({ rocket, onClose }: { rocket: CatalogRocket; onClose: () => void }) {
+  return (
+    <div className="drawer-backdrop" onClick={onClose}>
+      <aside className="drawer catalog-drawer" onClick={(event) => event.stopPropagation()}>
+        <button className="close" onClick={onClose}>×</button>
+        <div className="catalog-drawer-art" style={rocket.image ? { backgroundImage: `linear-gradient(to top,#0a0d20,transparent),url("${rocket.image}")` } : undefined}>
+          {!rocket.image && <span>▲</span>}
+        </div>
+        <span className={`catalog-drawer-status ${rocket.active === true ? "active" : rocket.active === false ? "retired" : ""}`}><i /> {rocket.active === true ? "ACTIEF" : rocket.active === false ? "HISTORISCH" : "STATUS ONBEKEND"}</span>
+        <p className="provider">{rocket.manufacturer.toUpperCase()} · {rocket.country}</p>
+        <h2>{rocket.name}</h2>
+        <p className="drawer-description">{rocket.description}</p>
+        <div className="rocket-spec-grid">
+          {[
+            ["FAMILIE", rocket.family],
+            ["VARIANT", rocket.variant || "—"],
+            ["HOOGTE", catalogNumber(rocket.length, " m")],
+            ["DIAMETER", catalogNumber(rocket.diameter, " m")],
+            ["STARTMASSA", catalogNumber(rocket.launchMass, " t")],
+            ["LEO PAYLOAD", catalogNumber(rocket.leoCapacity, " kg")],
+            ["GTO PAYLOAD", catalogNumber(rocket.gtoCapacity, " kg")],
+            ["STUWKRACHT", catalogNumber(rocket.thrust, " kN")],
+          ].map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}
+        </div>
+        <div className="catalog-flight-score">
+          <div><span>TOTAAL</span><strong>{rocket.totalLaunches}</strong></div>
+          <div><span>GESLAAGD</span><strong>{rocket.successfulLaunches}</strong></div>
+          <div><span>MISLUKT</span><strong>{rocket.failedLaunches}</strong></div>
+          <div><span>GEPLAND</span><strong>{rocket.pendingLaunches}</strong></div>
+        </div>
+        <div className="drawer-actions">
+          {rocket.infoUrl && <a className="primary" href={rocket.infoUrl} target="_blank" rel="noreferrer">Officiële bron ↗</a>}
+          {rocket.wikiUrl && <a href={rocket.wikiUrl} target="_blank" rel="noreferrer">Technische achtergrond ↗</a>}
+        </div>
+      </aside>
+    </div>
   );
 }
 
 function LaunchCard({ launch }: { launch: Launch }) {
   return (
-    <Link className="launch-card" href={`/launch/${encodeURIComponent(launch.id)}`}>
-      <div className="card-art"><RocketArt provider={launch.provider} /><StatusPill status={launch.status} label={launch.statusLabel} /></div>
-      <div className="card-body">
-        <div className="card-topline"><span>{launch.provider.toUpperCase()}</span><span>{launch.orbit}</span></div>
-        <h4>{launch.name}</h4>
-        <p>{launch.rocket}</p>
-        <div className="card-meta">
-          <span>{icons.calendar} {formatDate(launch.windowStart)}</span>
-          <span>{icons.pin} {launch.location}</span>
+    <article className="launch-card">
+      <Link className="launch-card-main" href={`/launch/${encodeURIComponent(launch.id)}`}>
+        <div className="card-art"><RocketArt provider={launch.provider} /><StatusPill status={launch.status} label={launch.statusLabel} /></div>
+        <div className="card-body">
+          <div className="card-topline"><span>{launch.provider.toUpperCase()}</span><span>{launch.orbit}</span></div>
+          <h4>{launch.name}</h4>
+          <p>{launch.rocket}</p>
+          <div className="card-meta">
+            <span>{icons.calendar} {formatDate(launch.windowStart)}</span>
+            <span>{icons.pin} {launch.location}</span>
+          </div>
+          {isPending(launch.status) ? <Countdown date={launch.windowStart} /> : <span className={`result result-${launch.status}`}>MISSIE {missionResult(launch.status)}</span>}
         </div>
-        {isPending(launch.status) ? <Countdown date={launch.windowStart} /> : <span className={`result result-${launch.status}`}>MISSIE {missionResult(launch.status)}</span>}
-        <span className="card-detail-link">Open volledige missie →</span>
+      </Link>
+      <div className="card-action-row">
+        <Link href={`/launch/${encodeURIComponent(launch.id)}`}>Missiedossier →</Link>
+        <Link className="watch" href={`/launch/${encodeURIComponent(launch.id)}/watch`}>▶ {isPending(launch.status) ? "Watch center" : "Replay center"}</Link>
       </div>
-    </Link>
+    </article>
   );
 }
 
