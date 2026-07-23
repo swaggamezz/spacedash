@@ -69,6 +69,7 @@ export type Launch = {
     pendingLaunches?: number;
   };
   agency?: {
+    id?: number;
     type?: string;
     country?: string;
     description?: string;
@@ -119,6 +120,7 @@ type ApiLaunch = {
   hashtag?: string | null;
   infographic?: string | null;
   launch_service_provider?: {
+    id?: number;
     name?: string;
     type?: string;
     country_code?: string;
@@ -447,6 +449,7 @@ function mapLaunch(item: ApiLaunch, past = false): Launch {
       pendingLaunches: config?.pending_launches,
     },
     agency: {
+      id: agency?.id,
       type: agency?.type,
       country: agency?.country_code,
       description: agency?.description,
@@ -549,7 +552,7 @@ export async function getAgencyLaunches(agencyId: number, limit = 12): Promise<L
   if (!Number.isInteger(agencyId) || agencyId < 1) return [];
   try {
     const query = new URLSearchParams({
-      launch_service_provider__id: String(agencyId),
+      lsp__id: String(agencyId),
       limit: String(Math.min(Math.max(limit, 1), 24)),
       ordering: "-net",
       mode: "detailed",
@@ -561,7 +564,9 @@ export async function getAgencyLaunches(agencyId: number, limit = 12): Promise<L
     });
     if (!response.ok) return [];
     const data = (await response.json()) as { results?: ApiLaunch[] };
-    return (data.results ?? []).map((item) => mapLaunch(item, new Date(item.net).getTime() < Date.now()));
+    return (data.results ?? [])
+      .map((item) => mapLaunch(item, new Date(item.net).getTime() < Date.now()))
+      .filter((launch) => launch.agency?.id === agencyId);
   } catch {
     return [];
   }
