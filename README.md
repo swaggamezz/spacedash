@@ -27,11 +27,25 @@ automatisch gedeployed.
 
 ## Volgende fases
 
-- detailpagina's met rakettrappen, motoren, afmetingen en capaciteit;
-- interactieve grondtrack/trajectweergave;
+- interactieve grondtrack/trajectweergave zodra betrouwbare vluchtdata beschikbaar is;
 - favorieten en pushmeldingen;
 - redundante databronnen en officiële webcastdetectie;
 - launch-analyse en vergelijking met eerdere versies van dezelfde raket.
+
+## SpaceBot
+
+SpaceBot werkt standaard gratis met de ingebouwde, gecontroleerde raketdatabase.
+Wanneer Vercel AI Gateway voor het project is geactiveerd, gebruikt `/api/ask`
+automatisch een taalmodel en valt bij een fout of ontbrekend budget terug op de
+gratis boordcomputer.
+
+Optioneel kan het model worden ingesteld met:
+
+```bash
+SPACEDASH_AI_MODEL=google/gemini-2.5-flash-lite
+```
+
+Er worden nooit geschatte waarden als echte live telemetrie gepresenteerd.
 
 ## Getting Started
 
