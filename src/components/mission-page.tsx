@@ -4,6 +4,7 @@ import type { Launch } from "@/lib/launches";
 import { starshipTimeline } from "@/lib/rockets";
 import { SpaceAssistant } from "@/components/space-assistant";
 import { TimezoneClock } from "@/components/timezone-clock";
+import { ActiveRefresh } from "@/components/active-refresh";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
@@ -53,6 +54,43 @@ function mapEmbed(latitude?: number | null, longitude?: number | null) {
   const span = 0.18;
   const bbox = [longitude - span, latitude - span, longitude + span, latitude + span].join(",");
   return `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${latitude}%2C${longitude}`;
+}
+
+function isPending(status: Launch["status"]) {
+  return status === "upcoming" || status === "hold";
+}
+
+function missionResult(status: Launch["status"]) {
+  if (status === "success") return "GESLAAGD";
+  if (status === "failure") return "MISLUKT";
+  if (status === "cancelled") return "GEANNULEERD";
+  if (status === "aborted") return "POGING AFGEBROKEN";
+  return "UITGESTELD";
+}
+
+function streamState(launch: Launch, hasEmbeddedVideo: boolean) {
+  if (launch.webcastLive) return "NU LIVE";
+  if (launch.status === "cancelled") return "LAUNCH GEANNULEERD";
+  if (launch.status === "aborted") return "POGING AFGEBROKEN";
+  if (launch.status === "hold") return "NIEUWE STREAM VOLGT";
+  if (launch.status === "success" || launch.status === "failure") {
+    return launch.webcast ? "REPLAY BESCHIKBAAR" : "GEEN OPNAME GEVONDEN";
+  }
+  if (hasEmbeddedVideo || launch.webcast) return "STREAM GEPLAND";
+  return "NOG NIET GEPUBLICEERD";
+}
+
+function streamMessage(launch: Launch) {
+  if (launch.status === "cancelled") {
+    return "Deze lancering is geannuleerd. Een oude of verwijderde stream wordt niet meer als live getoond.";
+  }
+  if (launch.status === "aborted") {
+    return "De lanceerpoging is afgebroken. Zodra een nieuwe poging en uitzending zijn bevestigd, verschijnen ze hier.";
+  }
+  if (launch.status === "hold") {
+    return "De lancering staat uitgesteld of on hold. Een nieuwe officiële streamlink volgt zodra die wordt gepubliceerd.";
+  }
+  return "De officiële stream kan niet worden ingebed of is nog niet gepubliceerd. Dat betekent niet automatisch dat de lancering is geannuleerd.";
 }
 
 function MissionCountdown({ date }: { date: string }) {
@@ -152,12 +190,13 @@ function MissionUtilities({ launch }: { launch: Launch }) {
 export function MissionPage({ launch, related }: { launch: Launch; related: Launch[] }) {
   const streams = launch.streams?.length ? launch.streams : launch.webcast ? [launch.webcast] : [];
   const [activeStream, setActiveStream] = useState(streams[0] ?? null);
-  const video = youtubeId(activeStream);
-  const isUpcoming = launch.status === "upcoming" || launch.status === "hold";
+  const selectedStream = activeStream && streams.includes(activeStream) ? activeStream : streams[0] ?? null;
+  const video = youtubeId(selectedStream);
+  const pending = isPending(launch.status);
   const isStarship = /starship|super heavy/i.test(`${launch.name} ${launch.rocket}`);
   const map = mapEmbed(launch.padDetails?.latitude, launch.padDetails?.longitude);
-  const previous = related.filter((item) => item.status === "success" || item.status === "failure");
-  const future = related.filter((item) => item.status === "upcoming" || item.status === "hold");
+  const previous = related.filter((item) => !isPending(item.status));
+  const future = related.filter((item) => isPending(item.status));
   const timeline = useMemo(() => {
     if (launch.timeline?.length) return launch.timeline;
     if (isStarship) return starshipTimeline;
@@ -177,6 +216,7 @@ export function MissionPage({ launch, related }: { launch: Launch; related: Laun
 
   return (
     <main className="mission-page">
+      <ActiveRefresh />
       <nav className="mission-nav">
         <Link href="/"><span>▲</span> SPACE<strong>DASH</strong></Link>
         <Link href="/">← Mission control</Link>
@@ -193,7 +233,7 @@ export function MissionPage({ launch, related }: { launch: Launch; related: Laun
           <p>{launch.provider.toUpperCase()} / {launch.missionType?.toUpperCase() ?? launch.orbit.toUpperCase()}</p>
           <h1>{launch.name}</h1>
           <strong>{launch.rocket} · {launch.orbit}</strong>
-          {isUpcoming ? <MissionCountdown date={launch.windowStart} /> : <div className="mission-result">MISSIE {launch.status === "success" ? "GESLAAGD" : launch.status === "failure" ? "MISLUKT" : "AFGEROND"}</div>}
+          {pending ? <MissionCountdown date={launch.windowStart} /> : <div className={`mission-result result-${launch.status}`}>MISSIE {missionResult(launch.status)}</div>}
         </div>
         {!launch.image && <div className="mission-orbit-art"><i /><i /><span>▲</span></div>}
       </section>
@@ -221,8 +261,9 @@ export function MissionPage({ launch, related }: { launch: Launch; related: Laun
               {launch.probability !== null && <div><span>GO-KANS</span><strong>{launch.probability}%</strong></div>}
               <div><span>LAATSTE DATA-UPDATE</span><strong>{launch.lastUpdated ? dateLabel(launch.lastUpdated) : "Onbekend"}</strong></div>
             </div>
-            {(launch.weatherConcerns || launch.holdReason || launch.failReason) && (
+            {(launch.statusDescription || launch.weatherConcerns || launch.holdReason || launch.failReason) && (
               <div className="mission-alerts">
+                {launch.statusDescription && <div><span>STATUS</span><p>{launch.statusDescription}</p></div>}
                 {launch.weatherConcerns && <div><span>WEER</span><p>{launch.weatherConcerns}</p></div>}
                 {launch.holdReason && <div><span>HOLD</span><p>{launch.holdReason}</p></div>}
                 {launch.failReason && <div className="critical"><span>FAILURE</span><p>{launch.failReason}</p></div>}
@@ -294,11 +335,11 @@ export function MissionPage({ launch, related }: { launch: Launch; related: Laun
 
         <aside className="mission-side">
           <section className="watch-panel">
-            <div className="panel-label"><span><i /> WATCH CENTER</span><small>{video ? "VIDEO BESCHIKBAAR" : "EXTERNE BRON"}</small></div>
-            {video ? <iframe src={`https://www.youtube-nocookie.com/embed/${video}?rel=0`} title={`Officiële uitzending van ${launch.name}`} allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /> : <div className="stream-placeholder"><span>▶</span><p>De officiële stream kan niet worden ingebed of is nog niet gepubliceerd.</p></div>}
-            {streams.length > 1 && <div className="stream-tabs">{streams.map((stream, index) => <button className={activeStream === stream ? "active" : ""} onClick={() => setActiveStream(stream)} key={stream}>FEED {index + 1}</button>)}</div>}
+            <div className="panel-label"><span><i className={launch.webcastLive ? "is-live" : ""} /> WATCH CENTER</span><small>{streamState(launch, Boolean(video))}</small></div>
+            {video ? <iframe src={`https://www.youtube-nocookie.com/embed/${video}?rel=0`} title={`Officiële uitzending van ${launch.name}`} allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /> : <div className="stream-placeholder"><span>▶</span><p>{streamMessage(launch)}</p></div>}
+            {streams.length > 1 && <div className="stream-tabs">{streams.map((stream, index) => <button className={selectedStream === stream ? "active" : ""} onClick={() => setActiveStream(stream)} key={stream}>FEED {index + 1}</button>)}</div>}
             <div className="watch-actions">
-              {activeStream && <a className="primary" href={activeStream} target="_blank" rel="noreferrer">Open officiële uitzending ↗</a>}
+              {selectedStream && <a className="primary" href={selectedStream} target="_blank" rel="noreferrer">Open officiële uitzending ↗</a>}
               {launch.infoUrl && <a href={launch.infoUrl} target="_blank" rel="noreferrer">Website lanceerorganisatie ↗</a>}
               {launch.infographic && <a href={launch.infographic} target="_blank" rel="noreferrer">Missie-infographic ↗</a>}
             </div>
@@ -347,7 +388,7 @@ export function MissionPage({ launch, related }: { launch: Launch; related: Laun
         {!related.length && <div className="related-empty">Er zijn nog geen andere vluchten met exact deze configuratie in de openbare database gevonden.</div>}
       </section>
 
-      <footer className="mission-footer"><span>▲ SPACEDASH</span><p>Data: Launch Library 2 en officiële aanbieders · tijden kunnen wijzigen</p><Link href="/">Terug naar mission control ↑</Link></footer>
+      <footer className="mission-footer"><span>▲ SPACEDASH</span><p>Data: Launch Library 2 en officiële aanbieders · actief bezoek ververst iedere minuut</p><Link href="/">Terug naar mission control ↑</Link></footer>
       <SpaceAssistant context={`${launch.name}, ${launch.rocket}, ${launch.mission}, ${launch.description}`} />
     </main>
   );
