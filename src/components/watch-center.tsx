@@ -13,7 +13,7 @@ function youtubeId(url: string) {
     const parsed = new URL(url);
     if (parsed.hostname.includes("youtu.be")) return parsed.pathname.slice(1).split("/")[0];
     if (parsed.hostname.includes("youtube.com")) {
-      if (parsed.pathname.startsWith("/live/") || parsed.pathname.startsWith("/embed/")) {
+      if (parsed.pathname.startsWith("/live/") || parsed.pathname.startsWith("/embed/") || parsed.pathname.startsWith("/shorts/")) {
         return parsed.pathname.split("/")[2];
       }
       return parsed.searchParams.get("v");
@@ -116,7 +116,7 @@ export function WatchCenter({ launch }: { launch: Launch }) {
           <span className={`watch-live-state ${launch.webcastLive ? "live" : ""}`}><i /> {launch.webcastLive ? "NU LIVE" : launch.statusLabel}</span>
           <p>{launch.provider.toUpperCase()} / MISSION WATCH CENTER</p>
           <h1>{launch.name}</h1>
-          <small>{dateLabel(launch.windowStart)} · {launch.pad}, {launch.location}</small>
+          <small>{dateLabel(launch.net)} · {launch.pad}, {launch.location}</small>
         </div>
         <div className="watch-toolbar">
           <label className="watch-stream-picker">
@@ -190,7 +190,7 @@ export function WatchCenter({ launch }: { launch: Launch }) {
           <small><i className={launch.webcastLive ? "live" : ""} /> {launch.webcastLive ? "PUBLIEKE WEBCAST LIVE" : "WACHT OP PUBLIEKE DOWNLINK"}</small>
         </div>
         <div className="watch-telemetry-grid">
-          <div className="available"><span>MISSIEKLOK</span><MissionClock date={launch.windowStart} /><small>Berekend vanaf bevestigde T−0</small></div>
+          <div className="available"><span>MISSIEKLOK</span><MissionClock date={launch.net} /><small>Berekend vanaf bevestigde T−0</small></div>
           <div className="available"><span>LAUNCHSTATUS</span><strong>{launch.statusLabel}</strong><small>Launch Library-status</small></div>
           <div className="available"><span>VIDEOFEEDS</span><strong>{sources.length}</strong><small>{launch.webcastLive ? "Uitzending actief" : "Publieke bronnen gevonden"}</small></div>
           <div><span>HOOGTE</span><strong>—</strong><small>Geen openbare datafeed</small></div>

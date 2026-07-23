@@ -3,7 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-const REFRESH_INTERVAL = 60_000;
+// 5 minuten, in lijn met de server-side revalidate en de rate limit van Launch Library.
+const REFRESH_INTERVAL = 300_000;
 
 export function ActiveRefresh() {
   const router = useRouter();

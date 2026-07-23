@@ -83,7 +83,7 @@ export function AgencyDatabase() {
             <h2>Agentschappendatabase</h2>
             <p>Ruimtevaartagentschappen, commerciële launchproviders en internationale organisaties uit de openbare catalogus.</p>
           </div>
-          <strong>{total || "350"}<small> organisaties</small></strong>
+          <strong>{total || "—"}<small> organisaties</small></strong>
         </div>
 
         <div className="agency-controls">
@@ -109,6 +109,11 @@ export function AgencyDatabase() {
 
         {error && <div className="catalog-state error">{error}</div>}
         {loading && !agencies.length && <div className="catalog-state"><i /> Wereldwijde agentschappen laden…</div>}
+        {(filter !== "all" || country !== "all") && agencies.length < total && (
+          <div className="catalog-state">
+            Type- en landfilters werken op de {agencies.length} geladen organisaties. Laad meer voor een volledig beeld.
+          </div>
+        )}
         <div className="agency-grid">
           {visible.map((agency) => (
             <Link className="agency-card" href={`/agency/${agency.id}`} key={agency.id}>

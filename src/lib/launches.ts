@@ -4,7 +4,8 @@ export type LaunchStatus =
   | "failure"
   | "hold"
   | "aborted"
-  | "cancelled";
+  | "cancelled"
+  | "completed";
 
 export type StreamSource = {
   url: string;
@@ -20,6 +21,8 @@ export type Launch = {
   mission: string;
   description: string;
   image: string | null;
+  /** Actuele geplande lanceertijd (T-0) uit Launch Library. */
+  net: string;
   windowStart: string;
   windowEnd: string;
   location: string;
@@ -214,72 +217,83 @@ type ApiUrl = {
   title?: string;
 };
 
-const fallback: Launch[] = [
-  {
-    id: "demo-starship",
-    name: "Starship Flight Test",
-    provider: "SpaceX",
-    rocket: "Starship / Super Heavy",
-    mission: "Integrated flight test",
-    description:
-      "Volledige testvlucht van het herbruikbare Starship-lanceersysteem. Live gegevens worden geladen zodra de databron bereikbaar is.",
-    image: null,
-    windowStart: "2026-08-02T12:30:00Z",
-    windowEnd: "2026-08-02T14:30:00Z",
-    location: "Starbase, Texas",
-    pad: "Orbital Launch Mount A",
-    status: "upcoming",
-    statusLabel: "Go for launch",
-    orbit: "Suborbital",
-    webcast: "https://www.youtube.com/@SpaceX",
-    infoUrl: "https://www.spacex.com/launches/",
-    probability: 70,
-  },
-  {
-    id: "demo-ariane",
-    name: "Ariane 6 · Galileo",
-    provider: "Arianespace",
-    rocket: "Ariane 64",
-    mission: "Galileo navigation satellites",
-    description: "Lancering van nieuwe Europese navigatiesatellieten.",
-    image: null,
-    windowStart: "2026-08-08T21:12:00Z",
-    windowEnd: "2026-08-08T23:12:00Z",
-    location: "Kourou, French Guiana",
-    pad: "ELA-4",
-    status: "upcoming",
-    statusLabel: "To be confirmed",
-    orbit: "MEO",
-    webcast: "https://www.youtube.com/@arianespace",
-    infoUrl: "https://www.arianespace.com/",
-    probability: null,
-  },
-  {
-    id: "demo-electron",
-    name: "Electron · Dedicated rideshare",
-    provider: "Rocket Lab",
-    rocket: "Electron",
-    mission: "Dedicated rideshare",
-    description: "Kleine satellieten naar een zon-synchrone baan.",
-    image: null,
-    windowStart: "2026-07-19T03:42:00Z",
-    windowEnd: "2026-07-19T05:42:00Z",
-    location: "Māhia Peninsula, New Zealand",
-    pad: "Launch Complex 1B",
-    status: "success",
-    statusLabel: "Success",
-    orbit: "SSO",
-    webcast: "https://www.youtube.com/@RocketLab",
-    infoUrl: "https://www.rocketlabusa.com/missions/",
-    probability: null,
-  },
-];
+// Voorbeelddata voor als Launch Library niet bereikbaar is. Datums zijn
+// relatief aan "nu" zodat de demo nooit permanent in het verleden belandt.
+function fallbackLaunches(): Launch[] {
+  const day = 86_400_000;
+  const hour = 3_600_000;
+  const at = (offset: number) => new Date(Date.now() + offset).toISOString();
+  return [
+    {
+      id: "demo-starship",
+      name: "Starship Flight Test",
+      provider: "SpaceX",
+      rocket: "Starship / Super Heavy",
+      mission: "Integrated flight test",
+      description:
+        "Voorbeeldmissie: volledige testvlucht van het herbruikbare Starship-lanceersysteem. Live gegevens worden geladen zodra de databron bereikbaar is.",
+      image: null,
+      net: at(10 * day),
+      windowStart: at(10 * day),
+      windowEnd: at(10 * day + 2 * hour),
+      location: "Starbase, Texas",
+      pad: "Orbital Launch Mount A",
+      status: "upcoming",
+      statusLabel: "Go for launch",
+      orbit: "Suborbital",
+      webcast: "https://www.youtube.com/@SpaceX",
+      infoUrl: "https://www.spacex.com/launches/",
+      probability: 70,
+    },
+    {
+      id: "demo-ariane",
+      name: "Ariane 6 · Galileo",
+      provider: "Arianespace",
+      rocket: "Ariane 64",
+      mission: "Galileo navigation satellites",
+      description: "Voorbeeldmissie: lancering van nieuwe Europese navigatiesatellieten.",
+      image: null,
+      net: at(16 * day),
+      windowStart: at(16 * day),
+      windowEnd: at(16 * day + 2 * hour),
+      location: "Kourou, French Guiana",
+      pad: "ELA-4",
+      status: "upcoming",
+      statusLabel: "To be confirmed",
+      orbit: "MEO",
+      webcast: "https://www.youtube.com/@arianespace",
+      infoUrl: "https://www.arianespace.com/",
+      probability: null,
+    },
+    {
+      id: "demo-electron",
+      name: "Electron · Dedicated rideshare",
+      provider: "Rocket Lab",
+      rocket: "Electron",
+      mission: "Dedicated rideshare",
+      description: "Voorbeeldmissie: kleine satellieten naar een zon-synchrone baan.",
+      image: null,
+      net: at(-4 * day),
+      windowStart: at(-4 * day),
+      windowEnd: at(-4 * day + 2 * hour),
+      location: "Māhia Peninsula, New Zealand",
+      pad: "Launch Complex 1B",
+      status: "success",
+      statusLabel: "Success",
+      orbit: "SSO",
+      webcast: "https://www.youtube.com/@RocketLab",
+      infoUrl: "https://www.rocketlabusa.com/missions/",
+      probability: null,
+    },
+  ];
+}
 
 function statusOf(item: ApiLaunch, past: boolean): LaunchStatus {
   const label = `${item.status?.name ?? ""} ${item.status?.abbrev ?? ""}`.toLowerCase();
   if (label.includes("cancel") || label.includes("geannuleerd")) return "cancelled";
   if (label.includes("abort")) return "aborted";
   if (label.includes("fail")) return "failure";
+  if (label.includes("in flight")) return "upcoming";
   if (
     label.includes("hold") ||
     label.includes("tbd") ||
@@ -291,7 +305,8 @@ function statusOf(item: ApiLaunch, past: boolean): LaunchStatus {
     return "hold";
   }
   if (label.includes("success") || (past && label.includes("complete"))) return "success";
-  return past ? "hold" : "upcoming";
+  // Afgeronde launches met een onbekende status zijn "afgerond", niet "uitgesteld".
+  return past ? "completed" : "upcoming";
 }
 
 function externalUrl(value: unknown): string | null {
@@ -312,6 +327,13 @@ function externalUrl(value: unknown): string | null {
   } catch {
     return null;
   }
+}
+
+// Lat/long zijn strings in LL2 2.2.0; 0 is een geldige coördinaat, NaN niet.
+function coordinate(value?: string | null): number | null {
+  if (value == null || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function providerHome(provider: string): string | null {
@@ -398,6 +420,7 @@ function mapLaunch(item: ApiLaunch, past = false): Launch {
     mission: item.mission?.name ?? item.name,
     description: item.mission?.description ?? "Missiedetails volgen zodra ze zijn bevestigd.",
     image,
+    net: item.net ?? item.window_start,
     windowStart: item.window_start ?? item.net,
     windowEnd: item.window_end ?? item.net,
     location: item.pad?.location?.name ?? "Locatie nog niet bevestigd",
@@ -410,7 +433,9 @@ function mapLaunch(item: ApiLaunch, past = false): Launch {
     infoUrl:
       item.infoURLs?.map((url) => externalUrl(url)).find(Boolean) ??
       providerHome(item.launch_service_provider?.name ?? ""),
-    probability: item.probability ?? null,
+    // Launch Library gebruikt -1 voor "onbekend"; alleen 0–100 is een echte GO-kans.
+    probability:
+      item.probability != null && item.probability >= 0 ? item.probability : null,
     lastUpdated: item.last_updated,
     missionType: item.mission?.type,
     weatherConcerns: item.weather_concerns ?? null,
@@ -466,8 +491,8 @@ function mapLaunch(item: ApiLaunch, past = false): Launch {
     },
     padDetails: {
       description: item.pad?.description,
-      latitude: item.pad?.latitude ? Number(item.pad.latitude) : null,
-      longitude: item.pad?.longitude ? Number(item.pad.longitude) : null,
+      latitude: coordinate(item.pad?.latitude),
+      longitude: coordinate(item.pad?.longitude),
       mapUrl: externalUrl(item.pad?.map_url),
       mapImage: externalUrl(item.pad?.map_image),
       timezone: item.pad?.location?.timezone_name,
@@ -500,14 +525,14 @@ function mapLaunch(item: ApiLaunch, past = false): Launch {
 }
 
 export async function getLaunch(id: string): Promise<Launch | null> {
-  const local = fallback.find((launch) => launch.id === id);
+  const local = fallbackLaunches().find((launch) => launch.id === id);
   if (local) return local;
 
   try {
     const response = await fetch(
       `https://ll.thespacedevs.com/2.2.0/launch/${encodeURIComponent(id)}/?mode=detailed`,
       {
-        next: { revalidate: 60 },
+        next: { revalidate: 300 },
         signal: AbortSignal.timeout(12_000),
         headers: { Accept: "application/json" },
       },
@@ -522,7 +547,7 @@ export async function getLaunch(id: string): Promise<Launch | null> {
 export async function getRelatedLaunches(launch: Launch): Promise<Launch[]> {
   const configId = launch.rocketDetails?.configurationId;
   if (!configId) {
-    const all = await getLaunches();
+    const { launches: all } = await getLaunches();
     return all.filter((item) => item.id !== launch.id && item.rocket === launch.rocket).slice(0, 12);
   }
 
@@ -531,7 +556,7 @@ export async function getRelatedLaunches(launch: Launch): Promise<Launch[]> {
       launcher_config__id: String(configId),
       limit: "16",
       ordering: "-net",
-      mode: "detailed",
+      mode: "normal",
     });
     const response = await fetch(`https://ll.thespacedevs.com/2.2.0/launch/?${query}`, {
       next: { revalidate: 1800 },
@@ -555,7 +580,7 @@ export async function getAgencyLaunches(agencyId: number, limit = 12): Promise<L
       lsp__id: String(agencyId),
       limit: String(Math.min(Math.max(limit, 1), 24)),
       ordering: "-net",
-      mode: "detailed",
+      mode: "normal",
     });
     const response = await fetch(`https://ll.thespacedevs.com/2.2.0/launch/?${query}`, {
       next: { revalidate: 300 },
@@ -597,15 +622,17 @@ export async function searchHistoricalLaunches(search: string, limit = 30): Prom
 }
 
 async function fetchList(kind: "upcoming" | "previous", limit: number) {
+  // mode=normal en revalidate 300 houden ons ruim binnen de gratis
+  // rate limit van Launch Library (~15 requests per uur per IP).
   const query = new URLSearchParams({
     limit: String(limit),
-    mode: "detailed",
+    mode: "normal",
     ordering: kind === "upcoming" ? "net" : "-net",
   });
   const response = await fetch(
     `https://ll.thespacedevs.com/2.2.0/launch/${kind}/?${query}`,
     {
-      next: { revalidate: kind === "upcoming" ? 60 : 1800 },
+      next: { revalidate: kind === "upcoming" ? 300 : 1800 },
       signal: AbortSignal.timeout(12_000),
       headers: { Accept: "application/json" },
     },
@@ -616,14 +643,70 @@ async function fetchList(kind: "upcoming" | "previous", limit: number) {
   return (data.results ?? []).map((item) => mapLaunch(item, kind === "previous"));
 }
 
-export async function getLaunches(): Promise<Launch[]> {
+export type LaunchFeed = {
+  launches: Launch[];
+  /** true wanneer de databron niet bereikbaar was en voorbeelddata wordt getoond. */
+  degraded: boolean;
+};
+
+export async function getLaunches(): Promise<LaunchFeed> {
   try {
     const [upcoming, previous] = await Promise.all([
       fetchList("upcoming", 18),
       fetchList("previous", 12),
     ]);
-    return [...upcoming, ...previous];
+    return { launches: [...upcoming, ...previous], degraded: false };
   } catch {
-    return fallback;
+    return { launches: fallbackLaunches(), degraded: true };
   }
+}
+
+export type LaunchStats = {
+  yearTotal: number;
+  lastYearTotal: number | null;
+  successRate: number | null;
+};
+
+async function countLaunches(filters: Record<string, string>): Promise<number | null> {
+  try {
+    const query = new URLSearchParams({ limit: "1", mode: "list", ...filters });
+    const response = await fetch(`https://ll.thespacedevs.com/2.2.0/launch/?${query}`, {
+      next: { revalidate: 3600 },
+      signal: AbortSignal.timeout(12_000),
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) return null;
+    const data = (await response.json()) as { count?: number };
+    return typeof data.count === "number" ? data.count : null;
+  } catch {
+    return null;
+  }
+}
+
+// Echte jaarcijfers uit Launch Library, één set gecachte count-calls per uur.
+// "Nu" wordt op het uur afgerond zodat de URL (en daarmee de fetch-cache) stabiel blijft.
+export async function getLaunchStats(): Promise<LaunchStats | null> {
+  const hourNow = new Date(Math.floor(Date.now() / 3_600_000) * 3_600_000);
+  const year = hourNow.getUTCFullYear();
+  const lastYearNow = new Date(hourNow);
+  lastYearNow.setUTCFullYear(year - 1);
+  const yearStart = (value: number) => `${value}-01-01T00:00:00Z`;
+
+  const [yearTotal, lastYearTotal, successes, failures] = await Promise.all([
+    countLaunches({ net__gte: yearStart(year), net__lt: hourNow.toISOString() }),
+    countLaunches({ net__gte: yearStart(year - 1), net__lt: lastYearNow.toISOString() }),
+    countLaunches({ net__gte: yearStart(year), net__lt: hourNow.toISOString(), status: "3" }),
+    countLaunches({ net__gte: yearStart(year), net__lt: hourNow.toISOString(), status: "4" }),
+  ]);
+
+  if (yearTotal === null) return null;
+  const decided = (successes ?? 0) + (failures ?? 0);
+  return {
+    yearTotal,
+    lastYearTotal,
+    successRate:
+      successes !== null && failures !== null && decided > 0
+        ? (successes / decided) * 100
+        : null,
+  };
 }

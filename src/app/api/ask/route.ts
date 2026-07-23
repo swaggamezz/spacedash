@@ -3,8 +3,41 @@ import { generateText } from "ai";
 
 export const maxDuration = 20;
 
+// Simpele in-memory throttle per IP, zodat het AI-endpoint niet onbeperkt
+// Gateway-budget kan verbruiken. Reset vanzelf per serverless-instance.
+const RATE_LIMIT = 20;
+const RATE_WINDOW = 300_000;
+const hits = new Map<string, { count: number; reset: number }>();
+
+function rateLimited(ip: string) {
+  const now = Date.now();
+  if (hits.size > 1000) {
+    for (const [key, entry] of hits) if (entry.reset < now) hits.delete(key);
+  }
+  const entry = hits.get(ip);
+  if (!entry || entry.reset < now) {
+    hits.set(ip, { count: 1, reset: now + RATE_WINDOW });
+    return false;
+  }
+  entry.count += 1;
+  return entry.count > RATE_LIMIT;
+}
+
 export async function POST(request: Request) {
-  const body = (await request.json()) as { question?: string; context?: string };
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  if (rateLimited(ip)) {
+    return Response.json(
+      { error: "Te veel vragen achter elkaar. Probeer het over een paar minuten opnieuw." },
+      { status: 429 },
+    );
+  }
+
+  let body: { question?: string; context?: string };
+  try {
+    body = (await request.json()) as { question?: string; context?: string };
+  } catch {
+    return Response.json({ error: "Ongeldige aanvraag." }, { status: 400 });
+  }
   const question = body.question?.trim().slice(0, 500);
   if (!question) return Response.json({ error: "Stel eerst een vraag." }, { status: 400 });
 

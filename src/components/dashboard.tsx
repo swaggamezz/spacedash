@@ -1,13 +1,13 @@
 "use client";
 
-import type { Launch, LaunchStatus } from "@/lib/launches";
+import type { Launch, LaunchStats, LaunchStatus } from "@/lib/launches";
 import type { CatalogRocket } from "@/lib/launch-vehicles";
 import { rockets, starshipTimeline, type Rocket } from "@/lib/rockets";
 import { SpaceAssistant } from "@/components/space-assistant";
 import { TimezoneClock } from "@/components/timezone-clock";
 import { ActiveRefresh } from "@/components/active-refresh";
 import { AgencyDatabase } from "@/components/agency-database";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 
 const icons = {
@@ -23,13 +23,20 @@ const icons = {
   arrow: "→",
 };
 
-function getTimeParts(date: string) {
-  const distance = Math.max(0, new Date(date).getTime() - Date.now());
-  const days = Math.floor(distance / 86_400_000);
-  const hours = Math.floor((distance / 3_600_000) % 24);
-  const minutes = Math.floor((distance / 60_000) % 60);
-  const seconds = Math.floor((distance / 1000) % 60);
+function getTimeParts(distance: number) {
+  const clamped = Math.max(0, distance);
+  const days = Math.floor(clamped / 86_400_000);
+  const hours = Math.floor((clamped / 3_600_000) % 24);
+  const minutes = Math.floor((clamped / 60_000) % 60);
+  const seconds = Math.floor((clamped / 1000) % 60);
   return { days, hours, minutes, seconds };
+}
+
+function elapsedClock(elapsed: number) {
+  const hours = Math.floor(elapsed / 3_600_000);
+  const minutes = Math.floor((elapsed / 60_000) % 60);
+  const seconds = Math.floor((elapsed / 1000) % 60);
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
 function formatDate(date: string) {
@@ -43,16 +50,28 @@ function formatDate(date: string) {
 }
 
 function Countdown({ date, large = false }: { date: string; large?: boolean }) {
-  const [time, setTime] = useState(() => getTimeParts(date));
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    const update = () => setTime(getTimeParts(date));
-    const timer = window.setInterval(update, 1000);
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, [date]);
+  }, []);
+  const distance = new Date(date).getTime() - now;
+
+  if (distance <= 0) {
+    return (
+      <div className={`countdown countdown-live ${large ? "countdown-large" : ""}`}>
+        <span className="live-tag"><strong>● LIVE</strong></span>
+        <span>
+          <strong>{elapsedClock(-distance)}</strong>
+          <small>T+</small>
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div className={`countdown ${large ? "countdown-large" : ""}`}>
-      {Object.entries(time).map(([label, value]) => (
+      {Object.entries(getTimeParts(distance)).map(([label, value]) => (
         <span key={label}>
           <strong>{String(value).padStart(2, "0")}</strong>
           <small>{label.slice(0, 1).toUpperCase()}</small>
@@ -93,6 +112,7 @@ function missionResult(status: LaunchStatus) {
   if (status === "failure") return "MISLUKT";
   if (status === "cancelled") return "GEANNULEERD";
   if (status === "aborted") return "POGING AFGEBROKEN";
+  if (status === "completed") return "AFGEROND";
   return "UITGESTELD";
 }
 
@@ -119,9 +139,27 @@ const nav = [
   [icons.globe, "Agentschappen"],
 ];
 
-export function Dashboard({ launches }: { launches: Launch[] }) {
+const tabSlugs: Record<string, string> = {
+  Overzicht: "overzicht",
+  Launches: "launches",
+  Starship: "starship",
+  Historie: "historie",
+  Raketten: "raketten",
+  Agentschappen: "agentschappen",
+};
+
+export function Dashboard({
+  launches,
+  degraded = false,
+  stats = null,
+}: {
+  launches: Launch[];
+  degraded?: boolean;
+  stats?: LaunchStats | null;
+}) {
   const [active, setActive] = useState("Overzicht");
   const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
   const [selectedRocket, setSelectedRocket] = useState<Rocket | null>(null);
   const [historyResults, setHistoryResults] = useState<Launch[]>([]);
   const [historyResultQuery, setHistoryResultQuery] = useState("");
@@ -146,6 +184,37 @@ export function Dashboard({ launches }: { launches: Launch[] }) {
         .includes(needle),
     );
   }, [active, historyResults, launches, previous, query, remoteHistoryReady, upcoming]);
+
+  // Tab in de URL: deeplinks en refresh belanden op dezelfde tab.
+  useEffect(() => {
+    const initialize = window.setTimeout(() => {
+      const slug = new URLSearchParams(window.location.search).get("tab")?.toLowerCase();
+      const label = Object.keys(tabSlugs).find((item) => tabSlugs[item] === slug);
+      if (label) setActive(label);
+    }, 0);
+    return () => window.clearTimeout(initialize);
+  }, []);
+
+  function selectTab(label: string) {
+    setActive(label);
+    const url = new URL(window.location.href);
+    if (label === "Overzicht") url.searchParams.delete("tab");
+    else url.searchParams.set("tab", tabSlugs[label]);
+    window.history.replaceState(null, "", url);
+  }
+
+  // De zoekbalk adverteert ⌘K, dus die sneltoets moet ook echt werken.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        searchRef.current?.focus();
+        searchRef.current?.select();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   useEffect(() => {
     if (!remoteHistoryActive) return;
@@ -180,31 +249,32 @@ export function Dashboard({ launches }: { launches: Launch[] }) {
     <div className="app-shell">
       <ActiveRefresh />
       <aside className="sidebar">
-        <a className="brand" href="#" onClick={() => setActive("Overzicht")}>
+        <a className="brand" href="#" onClick={(event) => { event.preventDefault(); selectTab("Overzicht"); }}>
           <span className="brand-glyph">▲</span>
           <span>SPACE<strong>DASH</strong></span>
         </a>
         <nav>
           <p>MISSIECONTROLE</p>
           {nav.map(([icon, label]) => (
-            <button className={active === label ? "active" : ""} key={label} onClick={() => setActive(label)}>
+            <button className={active === label ? "active" : ""} key={label} onClick={() => selectTab(label)}>
               <i>{icon}</i>{label}
             </button>
           ))}
         </nav>
         <div className="sidebar-footer">
-          <span><i /> LIVE DATA</span>
-          <small>Actief: verversing per minuut</small>
+          <span className={degraded ? "degraded" : ""}><i /> {degraded ? "VOORBEELDDATA" : "LIVE DATA"}</span>
+          <small>{degraded ? "Databron tijdelijk niet bereikbaar" : "Actief: verversing per 5 minuten"}</small>
           <small>Launch Library 2</small>
         </div>
       </aside>
 
       <main>
         <header>
-          <button className="mobile-logo" onClick={() => setActive("Overzicht")}>▲</button>
+          <button className="mobile-logo" onClick={() => selectTab("Overzicht")}>▲</button>
           <div className="search">
             <span>{icons.search}</span>
             <input
+              ref={searchRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={active === "Historie" ? "Zoek in alle historische launches..." : "Zoek launches, raketten of organisaties..."}
@@ -230,8 +300,14 @@ export function Dashboard({ launches }: { launches: Launch[] }) {
                       : `${filtered.length} missies gevonden in de automatische database.`}
               </p>
             </div>
-            <span className="live-badge"><i /> SYSTEMEN OPERATIONEEL</span>
+            <span className={`live-badge ${degraded ? "degraded" : ""}`}><i /> {degraded ? "DATABRON NIET BEREIKBAAR" : "SYSTEMEN OPERATIONEEL"}</span>
           </div>
+
+          {degraded && (
+            <div className="degraded-banner">
+              ⚠ De launchdatabron is tijdelijk niet bereikbaar. Je ziet voorbeelddata — SpaceDash probeert automatisch opnieuw verbinding te maken.
+            </div>
+          )}
 
           {active === "Overzicht" && featured && (
             <>
@@ -243,7 +319,7 @@ export function Dashboard({ launches }: { launches: Launch[] }) {
                   <h2>{featured.name}</h2>
                   <p className="mission">{featured.rocket} · {featured.mission}</p>
                   <div className="hero-bottom">
-                    <Countdown date={featured.windowStart} large />
+                    <Countdown date={featured.net} large />
                     <div className="hero-actions">
                       <Link className="primary" href={`/launch/${encodeURIComponent(featured.id)}/watch`}>{icons.play} Watch center</Link>
                       <Link href={`/launch/${encodeURIComponent(featured.id)}`}>Open missie {icons.arrow}</Link>
@@ -254,18 +330,13 @@ export function Dashboard({ launches }: { launches: Launch[] }) {
 
               <div className="section-heading">
                 <div><span>AANKOMEND</span><h3>Launchkalender</h3></div>
-                <button onClick={() => setActive("Launches")}>Bekijk alle launches {icons.arrow}</button>
+                <button onClick={() => selectTab("Launches")}>Bekijk alle launches {icons.arrow}</button>
               </div>
               <div className="launch-grid">
                 {upcoming.slice(1, 4).map((launch) => <LaunchCard key={launch.id} launch={launch} />)}
               </div>
 
-              <div className="stats">
-                <div><span>LANCERINGEN DIT JAAR</span><strong>148</strong><small>↑ 12% t.o.v. vorig jaar</small></div>
-                <div><span>SUCCESPERCENTAGE</span><strong>96.4%</strong><small>wereldwijd gemiddelde</small></div>
-                <div><span>ACTIEVE RAKETTYPES</span><strong>{new Set(launches.map((item) => item.rocket)).size}</strong><small>in huidige dataset</small></div>
-                <div><span>VOLGENDE 30 DAGEN</span><strong>{upcoming.filter((item) => new Date(item.windowStart).getTime() < new Date(featured.windowStart).getTime() + 2_592_000_000).length}</strong><small>geplande missies</small></div>
-              </div>
+              <YearStats stats={stats} launches={launches} upcoming={upcoming} />
             </>
           )}
 
@@ -285,7 +356,7 @@ export function Dashboard({ launches }: { launches: Launch[] }) {
                     ? remoteHistoryActive ? "ZOEKEN IN 7.500+ HISTORISCHE LAUNCHES" : "RECENTE AFGERONDE MISSIES"
                     : "VOLLEDIGE DATABASE"}
                 </span>
-                <span>Automatisch bijgewerkt · elke minuut bij actief bezoek</span>
+                <span>Automatisch bijgewerkt · elke 5 minuten bij actief bezoek</span>
               </div>
               {historyLoading && remoteHistoryActive && <div className="history-search-state"><i /> Historische database doorzoeken…</div>}
               {historyError && remoteHistoryActive && <div className="history-search-state error">{historyError}</div>}
@@ -303,11 +374,59 @@ export function Dashboard({ launches }: { launches: Launch[] }) {
 
       <nav className="mobile-nav">
         {nav.map(([icon, label]) => (
-          <button className={active === label ? "active" : ""} key={label} onClick={() => setActive(label)}>
+          <button className={active === label ? "active" : ""} key={label} onClick={() => selectTab(label)}>
             <i>{icon}</i><span>{label === "Agentschappen" ? "Agencies" : label}</span>
           </button>
         ))}
       </nav>
+    </div>
+  );
+}
+
+function YearStats({
+  stats,
+  launches,
+  upcoming,
+}: {
+  stats: LaunchStats | null;
+  launches: Launch[];
+  upcoming: Launch[];
+}) {
+  const delta =
+    stats?.lastYearTotal
+      ? ((stats.yearTotal - stats.lastYearTotal) / stats.lastYearTotal) * 100
+      : null;
+  const [thirtyDayCutoff] = useState(() => Date.now() + 2_592_000_000);
+  const nextThirtyDays = upcoming.filter(
+    (item) => new Date(item.net).getTime() < thirtyDayCutoff,
+  ).length;
+
+  return (
+    <div className="stats">
+      <div>
+        <span>LANCERINGEN DIT JAAR</span>
+        <strong>{stats ? stats.yearTotal : "—"}</strong>
+        <small>
+          {delta !== null
+            ? `${delta >= 0 ? "↑" : "↓"} ${Math.abs(delta).toFixed(0)}% t.o.v. zelfde periode vorig jaar`
+            : "Launch Library 2"}
+        </small>
+      </div>
+      <div>
+        <span>SUCCESPERCENTAGE</span>
+        <strong>{stats?.successRate != null ? `${stats.successRate.toFixed(1)}%` : "—"}</strong>
+        <small>dit jaar, wereldwijd</small>
+      </div>
+      <div>
+        <span>ACTIEVE RAKETTYPES</span>
+        <strong>{new Set(launches.map((item) => item.rocket)).size}</strong>
+        <small>in huidige dataset</small>
+      </div>
+      <div>
+        <span>VOLGENDE 30 DAGEN</span>
+        <strong>{nextThirtyDays}</strong>
+        <small>{nextThirtyDays >= upcoming.length ? `eerste ${upcoming.length} geladen missies` : "geplande missies"}</small>
+      </div>
     </div>
   );
 }
@@ -358,7 +477,7 @@ function StarshipCenter({ launches }: { launches: Launch[] }) {
         <div className="starship-telemetry-grid">
           <div className="available">
             <span>MISSION CLOCK</span>
-            {tracked ? <StarshipMissionClock date={tracked.windowStart} /> : <strong>—</strong>}
+            {tracked ? <StarshipMissionClock date={tracked.net} /> : <strong>—</strong>}
             <small>Gebaseerd op actuele T-0</small>
           </div>
           <div className="available">
@@ -542,7 +661,7 @@ function RocketDatabase({ onOpen }: { onOpen: (rocket: Rocket) => void }) {
       <section className="rocket-database">
         <div className="catalog-heading">
           <div><span>AUTOMATISCHE DATABASE</span><h2>Raketarchief</h2><p>Actieve, historische en experimentele lanceervoertuigen uit de volledige openbare catalogus.</p></div>
-          <strong>{total || "532"}<small> configuraties</small></strong>
+          <strong>{total || "—"}<small> configuraties</small></strong>
         </div>
 
         <div className="catalog-controls">
@@ -656,10 +775,10 @@ function LaunchCard({ launch }: { launch: Launch }) {
           <h4>{launch.name}</h4>
           <p>{launch.rocket}</p>
           <div className="card-meta">
-            <span>{icons.calendar} {formatDate(launch.windowStart)}</span>
+            <span>{icons.calendar} {formatDate(launch.net)}</span>
             <span>{icons.pin} {launch.location}</span>
           </div>
-          {isPending(launch.status) ? <Countdown date={launch.windowStart} /> : <span className={`result result-${launch.status}`}>MISSIE {missionResult(launch.status)}</span>}
+          {isPending(launch.status) ? <Countdown date={launch.net} /> : <span className={`result result-${launch.status}`}>MISSIE {missionResult(launch.status)}</span>}
         </div>
       </Link>
       <div className="card-action-row">

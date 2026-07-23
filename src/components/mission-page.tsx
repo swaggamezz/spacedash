@@ -14,7 +14,7 @@ function youtubeId(url: string | null) {
     const parsed = new URL(url);
     if (parsed.hostname.includes("youtu.be")) return parsed.pathname.slice(1).split("/")[0];
     if (parsed.hostname.includes("youtube.com")) {
-      if (parsed.pathname.startsWith("/live/") || parsed.pathname.startsWith("/embed/")) return parsed.pathname.split("/")[2];
+      if (parsed.pathname.startsWith("/live/") || parsed.pathname.startsWith("/embed/") || parsed.pathname.startsWith("/shorts/")) return parsed.pathname.split("/")[2];
       return parsed.searchParams.get("v");
     }
   } catch {
@@ -50,7 +50,7 @@ function money(value?: number | null) {
 }
 
 function mapEmbed(latitude?: number | null, longitude?: number | null) {
-  if (latitude === null || latitude === undefined || longitude === null || longitude === undefined) return null;
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude == null || longitude == null) return null;
   const span = 0.18;
   const bbox = [longitude - span, latitude - span, longitude + span, latitude + span].join(",");
   return `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${latitude}%2C${longitude}`;
@@ -65,6 +65,7 @@ function missionResult(status: Launch["status"]) {
   if (status === "failure") return "MISLUKT";
   if (status === "cancelled") return "GEANNULEERD";
   if (status === "aborted") return "POGING AFGEBROKEN";
+  if (status === "completed") return "AFGEROND";
   return "UITGESTELD";
 }
 
@@ -73,7 +74,7 @@ function streamState(launch: Launch, hasEmbeddedVideo: boolean) {
   if (launch.status === "cancelled") return "LAUNCH GEANNULEERD";
   if (launch.status === "aborted") return "POGING AFGEBROKEN";
   if (launch.status === "hold") return "NIEUWE STREAM VOLGT";
-  if (launch.status === "success" || launch.status === "failure") {
+  if (launch.status === "success" || launch.status === "failure" || launch.status === "completed") {
     return launch.webcast ? "REPLAY BESCHIKBAAR" : "GEEN OPNAME GEVONDEN";
   }
   if (hasEmbeddedVideo || launch.webcast) return "STREAM GEPLAND";
@@ -94,18 +95,31 @@ function streamMessage(launch: Launch) {
 }
 
 function MissionCountdown({ date }: { date: string }) {
-  const [distance, setDistance] = useState(0);
+  const [distance, setDistance] = useState<number | null>(null);
   useEffect(() => {
-    const update = () => setDistance(Math.max(0, new Date(date).getTime() - Date.now()));
+    const update = () => setDistance(new Date(date).getTime() - Date.now());
     update();
     const timer = window.setInterval(update, 1000);
     return () => window.clearInterval(timer);
   }, [date]);
+
+  // Na T-0 schakelt de klok om naar T+ in plaats van stil te blijven staan op nullen.
+  if (distance !== null && distance <= 0) {
+    const elapsed = -distance;
+    const clock = [
+      Math.floor(elapsed / 3_600_000),
+      Math.floor((elapsed / 60_000) % 60),
+      Math.floor((elapsed / 1000) % 60),
+    ].map((value) => String(value).padStart(2, "0")).join(":");
+    return <div className="mission-result result-live">● LIVE · T+{clock}</div>;
+  }
+
+  const remaining = distance ?? 0;
   const values = [
-    ["DAGEN", Math.floor(distance / 86_400_000)],
-    ["UREN", Math.floor(distance / 3_600_000) % 24],
-    ["MIN", Math.floor(distance / 60_000) % 60],
-    ["SEC", Math.floor(distance / 1000) % 60],
+    ["DAGEN", Math.floor(remaining / 86_400_000)],
+    ["UREN", Math.floor(remaining / 3_600_000) % 24],
+    ["MIN", Math.floor(remaining / 60_000) % 60],
+    ["SEC", Math.floor(remaining / 1000) % 60],
   ];
   return <div className="mission-countdown">{values.map(([label, value]) => <div key={label}><strong>{String(value).padStart(2, "0")}</strong><span>{label}</span></div>)}</div>;
 }
@@ -121,12 +135,22 @@ function RelatedCard({ launch }: { launch: Launch }) {
         <span className={`mission-status ${launch.status}`}><i /> {launch.statusLabel}</span>
       </div>
       <div>
-        <small>{compactDate(launch.windowStart)} · {launch.orbit}</small>
+        <small>{compactDate(launch.net)} · {launch.orbit}</small>
         <strong>{launch.name}</strong>
         <span>{launch.location}</span>
       </div>
     </Link>
   );
+}
+
+// Eén corrupte localStorage-entry mag de favorietenknop niet laten crashen.
+function readFavorites(): string[] {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem("spacedash-favorites") ?? "[]");
+    return Array.isArray(saved) ? saved.filter((id): id is string => typeof id === "string") : [];
+  } catch {
+    return [];
+  }
 }
 
 function MissionUtilities({ launch }: { launch: Launch }) {
@@ -135,41 +159,57 @@ function MissionUtilities({ launch }: { launch: Launch }) {
 
   useEffect(() => {
     const initialize = window.setTimeout(() => {
-      const saved = JSON.parse(window.localStorage.getItem("spacedash-favorites") ?? "[]") as string[];
-      setFavorite(saved.includes(launch.id));
+      setFavorite(readFavorites().includes(launch.id));
     }, 0);
     return () => window.clearTimeout(initialize);
   }, [launch.id]);
 
   function toggleFavorite() {
-    const saved = JSON.parse(window.localStorage.getItem("spacedash-favorites") ?? "[]") as string[];
+    const saved = readFavorites();
     const next = saved.includes(launch.id) ? saved.filter((id) => id !== launch.id) : [...saved, launch.id];
     window.localStorage.setItem("spacedash-favorites", JSON.stringify(next));
     setFavorite(next.includes(launch.id));
   }
 
   async function share() {
-    const data = { title: `${launch.name} · SpaceDash`, text: `${launch.name} — ${dateLabel(launch.windowStart)}`, url: window.location.href };
-    if (navigator.share) await navigator.share(data);
-    else {
-      await navigator.clipboard.writeText(window.location.href);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1800);
+    const data = { title: `${launch.name} · SpaceDash`, text: `${launch.name} — ${dateLabel(launch.net)}`, url: window.location.href };
+    try {
+      if (navigator.share) {
+        await navigator.share(data);
+      } else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(window.location.href);
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1800);
+      }
+    } catch {
+      // Gebruiker annuleerde het deelvenster, of delen is hier niet beschikbaar.
     }
   }
 
   function calendar() {
     const stamp = (date: string) => new Date(date).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+    // safe() doet de volledige ICS-escaping; de invoer bevat dus echte newlines.
     const safe = (value: string) => value.replace(/([,;\\])/g, "\\$1").replace(/\n/g, "\\n");
+    // RFC 5545: regels langer dan 75 tekens vouwen met CRLF + spatie.
+    const fold = (line: string) => {
+      const parts: string[] = [];
+      for (let index = 0; index < line.length; index += 74) {
+        parts.push((index === 0 ? "" : " ") + line.slice(index, index + 74));
+      }
+      return parts.join("\r\n");
+    };
+    const dtEnd = new Date(launch.windowEnd).getTime() > new Date(launch.net).getTime()
+      ? launch.windowEnd
+      : new Date(new Date(launch.net).getTime() + 3_600_000).toISOString();
     const ics = [
       "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//SpaceDash//Launch Calendar//NL",
       "BEGIN:VEVENT", `UID:${launch.id}@spacedash`, `DTSTAMP:${stamp(new Date().toISOString())}`,
-      `DTSTART:${stamp(launch.windowStart)}`, `DTEND:${stamp(launch.windowEnd)}`,
-      `SUMMARY:${safe(launch.name)}`, `DESCRIPTION:${safe(`${launch.description}\\nRaket: ${launch.rocket}\\nSpaceDash: ${window.location.href}`)}`,
+      `DTSTART:${stamp(launch.net)}`, `DTEND:${stamp(dtEnd)}`,
+      `SUMMARY:${safe(launch.name)}`, `DESCRIPTION:${safe(`${launch.description}\nRaket: ${launch.rocket}\nSpaceDash: ${window.location.href}`)}`,
       `LOCATION:${safe(`${launch.pad}, ${launch.location}`)}`, `URL:${window.location.href}`,
       "BEGIN:VALARM", "TRIGGER:-PT1H", "ACTION:DISPLAY", `DESCRIPTION:${safe(`${launch.name} start mogelijk over één uur`)}`, "END:VALARM",
       "END:VEVENT", "END:VCALENDAR",
-    ].join("\r\n");
+    ].map(fold).join("\r\n");
     const url = URL.createObjectURL(new Blob([ics], { type: "text/calendar;charset=utf-8" }));
     const anchor = document.createElement("a");
     anchor.href = url;
@@ -233,13 +273,13 @@ export function MissionPage({ launch, related }: { launch: Launch; related: Laun
           <p>{launch.provider.toUpperCase()} / {launch.missionType?.toUpperCase() ?? launch.orbit.toUpperCase()}</p>
           <h1>{launch.name}</h1>
           <strong>{launch.rocket} · {launch.orbit}</strong>
-          {pending ? <MissionCountdown date={launch.windowStart} /> : <div className={`mission-result result-${launch.status}`}>MISSIE {missionResult(launch.status)}</div>}
+          {pending ? <MissionCountdown date={launch.net} /> : <div className={`mission-result result-${launch.status}`}>MISSIE {missionResult(launch.status)}</div>}
         </div>
         {!launch.image && <div className="mission-orbit-art"><i /><i /><span>▲</span></div>}
       </section>
 
       <div className="mission-jumpbar">
-        <div><span>LANCERING</span><strong>{dateLabel(launch.windowStart)}</strong></div>
+        <div><span>LANCERING (T-0)</span><strong>{dateLabel(launch.net)}</strong></div>
         <div><span>RAKET</span><strong>{launch.rocket}</strong></div>
         <div><span>LOCATIE</span><strong>{launch.location}</strong></div>
         <div><span>DOELBAAN</span><strong>{launch.orbit}</strong></div>
@@ -252,8 +292,9 @@ export function MissionPage({ launch, related }: { launch: Launch; related: Laun
             <SectionTitle number="01" label="MISSIEOVERZICHT" title={launch.mission} />
             <p className="mission-description">{launch.description}</p>
             <div className="mission-facts">
-              <div><span>LANCEERVENSTER</span><strong>{dateLabel(launch.windowStart)}</strong></div>
-              <div><span>LOKALE PADTIJD</span><strong>{dateLabel(launch.windowStart, launch.padDetails?.timezone)}</strong></div>
+              <div><span>GEPLANDE T-0</span><strong>{dateLabel(launch.net)}</strong></div>
+              <div><span>LANCEERVENSTER</span><strong>{launch.windowStart === launch.windowEnd ? "Instantaan venster" : `${dateLabel(launch.windowStart)} – ${dateLabel(launch.windowEnd)}`}</strong></div>
+              <div><span>LOKALE PADTIJD</span><strong>{dateLabel(launch.net, launch.padDetails?.timezone)}</strong></div>
               <div><span>LOCATIE</span><strong>{launch.location}</strong></div>
               <div><span>PLATFORM</span><strong>{launch.pad}</strong></div>
               <div><span>MISSIETYPE</span><strong>{launch.missionType ?? "Niet geclassificeerd"}</strong></div>
@@ -391,7 +432,7 @@ export function MissionPage({ launch, related }: { launch: Launch; related: Laun
         {!related.length && <div className="related-empty">Er zijn nog geen andere vluchten met exact deze configuratie in de openbare database gevonden.</div>}
       </section>
 
-      <footer className="mission-footer"><span>▲ SPACEDASH</span><p>Data: Launch Library 2 en officiële aanbieders · actief bezoek ververst iedere minuut</p><Link href="/">Terug naar mission control ↑</Link></footer>
+      <footer className="mission-footer"><span>▲ SPACEDASH</span><p>Data: Launch Library 2 en officiële aanbieders · actief bezoek ververst iedere 5 minuten</p><Link href="/">Terug naar mission control ↑</Link></footer>
       <SpaceAssistant context={`${launch.name}, ${launch.rocket}, ${launch.mission}, ${launch.description}`} />
     </main>
   );

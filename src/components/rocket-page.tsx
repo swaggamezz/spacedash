@@ -11,7 +11,7 @@ export function RocketPage({ rocket }: { rocket: CatalogRocket }) {
     <main className="entity-page rocket-profile">
       <nav className="mission-nav">
         <Link href="/"><span>▲</span> SPACE<strong>DASH</strong></Link>
-        <Link href="/">← Terug naar raketten</Link>
+        <Link href="/?tab=raketten">← Terug naar raketten</Link>
         <TimezoneClock />
       </nav>
       <section

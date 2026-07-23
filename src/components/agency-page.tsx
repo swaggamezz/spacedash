@@ -47,7 +47,7 @@ export function AgencyPage({
       <ActiveRefresh />
       <nav className="mission-nav">
         <Link href="/"><span>▲</span> SPACE<strong>DASH</strong></Link>
-        <Link href="/">← Terug naar agentschappen</Link>
+        <Link href="/?tab=agentschappen">← Terug naar agentschappen</Link>
         <div className="mission-nav-links">
           <a href="#overzicht">Overzicht</a>
           <a href="#voertuigen">Voertuigen</a>
@@ -154,7 +154,7 @@ export function AgencyPage({
                 <div style={launch.image ? { backgroundImage: `linear-gradient(to top,#090b1d,transparent),url("${launch.image}")` } : undefined}>
                   <span className={`status status-${launch.status}`}><i />{launch.statusLabel}</span>
                 </div>
-                <small>{formatDate(launch.windowStart)} · {launch.orbit}</small>
+                <small>{formatDate(launch.net)} · {launch.orbit}</small>
                 <strong>{launch.name}</strong>
                 <p>{launch.rocket}</p>
                 <em>Open volledige missie →</em>
