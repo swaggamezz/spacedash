@@ -1,6 +1,7 @@
 "use client";
 
 import type { SpaceAgency } from "@/lib/agencies";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 type AgencyFilter = "all" | "government" | "commercial" | "multinational";
@@ -32,7 +33,6 @@ export function AgencyDatabase() {
   const [country, setCountry] = useState("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [selected, setSelected] = useState<SpaceAgency | null>(null);
 
   async function loadAgencies(offset: number, search: string, signal?: AbortSignal) {
     setLoading(true);
@@ -76,7 +76,6 @@ export function AgencyDatabase() {
   );
 
   return (
-    <>
       <section className="agency-database">
         <div className="catalog-heading">
           <div>
@@ -112,7 +111,7 @@ export function AgencyDatabase() {
         {loading && !agencies.length && <div className="catalog-state"><i /> Wereldwijde agentschappen laden…</div>}
         <div className="agency-grid">
           {visible.map((agency) => (
-            <button className="agency-card" onClick={() => setSelected(agency)} key={agency.id}>
+            <Link className="agency-card" href={`/agency/${agency.id}`} key={agency.id}>
               <div
                 className="agency-card-visual"
                 style={agency.image ? { backgroundImage: `linear-gradient(110deg,#080b1b 15%,rgba(8,11,27,.25)),url("${agency.image}")` } : undefined}
@@ -132,7 +131,7 @@ export function AgencyDatabase() {
                   <div><dt>Gepland</dt><dd>{agency.pendingLaunches}</dd></div>
                 </dl>
               </div>
-            </button>
+            </Link>
           ))}
         </div>
         {!loading && !visible.length && !error && (
@@ -146,56 +145,5 @@ export function AgencyDatabase() {
           </button>
         )}
       </section>
-      {selected && <AgencyDrawer agency={selected} onClose={() => setSelected(null)} />}
-    </>
-  );
-}
-
-function AgencyDrawer({ agency, onClose }: { agency: SpaceAgency; onClose: () => void }) {
-  return (
-    <div className="drawer-backdrop" onClick={onClose}>
-      <aside className="drawer agency-drawer" onClick={(event) => event.stopPropagation()}>
-        <button className="close" onClick={onClose}>×</button>
-        <div
-          className="agency-drawer-hero"
-          style={agency.image ? { backgroundImage: `linear-gradient(to top,#0a0d20,rgba(10,13,32,.2)),url("${agency.image}")` } : undefined}
-        >
-          {agency.logo && <span style={{ backgroundImage: `url("${agency.logo}")` }} />}
-        </div>
-        <p className="provider">{agency.type.toUpperCase()} · {agency.country}</p>
-        <h2>{agency.name}</h2>
-        <p className="agency-subtitle">{agency.abbreviation}{agency.parent ? ` · onderdeel van ${agency.parent}` : ""}</p>
-        <p className="drawer-description">{agency.description}</p>
-        <div className="rocket-spec-grid">
-          {[
-            ["OPGERICHT", agency.foundingYear],
-            ["LEIDING", agency.administrator],
-            ["LANDCODE", agency.country],
-            ["TYPE", agency.type],
-          ].map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}
-        </div>
-        <div className="catalog-flight-score">
-          <div><span>TOTAAL</span><strong>{agency.totalLaunches}</strong></div>
-          <div><span>GESLAAGD</span><strong>{agency.successfulLaunches}</strong></div>
-          <div><span>MISLUKT</span><strong>{agency.failedLaunches}</strong></div>
-          <div><span>GEPLAND</span><strong>{agency.pendingLaunches}</strong></div>
-        </div>
-        {!!agency.launchers.length && <AgencyAssets label="RAKETTEN & LAUNCHERS" items={agency.launchers} />}
-        {!!agency.spacecraft.length && <AgencyAssets label="RUIMTEVAARTUIGEN" items={agency.spacecraft} />}
-        <div className="drawer-actions">
-          {agency.infoUrl && <a className="primary" href={agency.infoUrl} target="_blank" rel="noreferrer">Officiële website ↗</a>}
-          {agency.wikiUrl && <a href={agency.wikiUrl} target="_blank" rel="noreferrer">Achtergrond ↗</a>}
-        </div>
-      </aside>
-    </div>
-  );
-}
-
-function AgencyAssets({ label, items }: { label: string; items: string[] }) {
-  return (
-    <section className="agency-assets">
-      <span>{label}</span>
-      <div>{items.map((item) => <small key={item}>{item}</small>)}</div>
-    </section>
   );
 }
