@@ -118,10 +118,22 @@ export function WatchCenter({ launch }: { launch: Launch }) {
           <h1>{launch.name}</h1>
           <small>{dateLabel(launch.windowStart)} · {launch.pad}, {launch.location}</small>
         </div>
-        <div className="watch-layout-controls" aria-label="Kies videolayout">
-          <button aria-pressed={layout === "focus"} className={layout === "focus" ? "active" : ""} onClick={() => setLayout("focus")}><i>▣</i><span>Focus</span></button>
-          <button aria-pressed={layout === "split"} className={layout === "split" ? "active" : ""} onClick={() => setLayout("split")} disabled={sources.length < 2}><i>▥</i><span>Split</span></button>
-          <button aria-pressed={layout === "grid"} className={layout === "grid" ? "active" : ""} onClick={() => setLayout("grid")} disabled={sources.length < 2}><i>▦</i><span>Grid</span></button>
+        <div className="watch-toolbar">
+          <label className="watch-stream-picker">
+            <span>PRIMAIRE LIVESTREAM</span>
+            <select value={primaryUrl} onChange={(event) => setPrimaryUrl(event.target.value)} disabled={!sources.length}>
+              {!sources.length && <option>Geen feed beschikbaar</option>}
+              {sources.map((source, index) => (
+                <option value={source.url} key={source.url}>{index + 1}. {source.title} · {sourceHost(source.url)}</option>
+              ))}
+            </select>
+            <small>{sources.length > 1 ? "Kies hier de camera die groot in beeld komt." : `${sources.length} publieke feed beschikbaar.`}</small>
+          </label>
+          <div className="watch-layout-controls" aria-label="Kies videolayout">
+            <button aria-pressed={layout === "focus"} className={layout === "focus" ? "active" : ""} onClick={() => setLayout("focus")}><i>▣</i><span>Focus</span></button>
+            <button aria-pressed={layout === "split"} className={layout === "split" ? "active" : ""} onClick={() => setLayout("split")} disabled={sources.length < 2}><i>▥</i><span>Split</span></button>
+            <button aria-pressed={layout === "grid"} className={layout === "grid" ? "active" : ""} onClick={() => setLayout("grid")} disabled={sources.length < 2}><i>▦</i><span>Grid</span></button>
+          </div>
         </div>
       </header>
 
