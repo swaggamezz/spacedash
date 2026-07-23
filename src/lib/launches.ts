@@ -143,6 +143,17 @@ function externalUrl(value: unknown): string | null {
   }
 }
 
+function providerHome(provider: string): string | null {
+  const name = provider.toLowerCase();
+  if (name.includes("spacex")) return "https://www.spacex.com/launches/";
+  if (name.includes("rocket lab")) return "https://www.rocketlabusa.com/missions/";
+  if (name.includes("ariane")) return "https://www.arianespace.com/missions/";
+  if (name.includes("blue origin")) return "https://www.blueorigin.com/missions";
+  if (name.includes("ula") || name.includes("united launch alliance")) return "https://www.ulalaunch.com/missions";
+  if (name.includes("nasa")) return "https://www.nasa.gov/launches/";
+  return null;
+}
+
 function mapLaunch(item: ApiLaunch, past = false): Launch {
   const image =
     typeof item.image === "string" ? item.image : item.image?.image_url ?? null;
@@ -168,9 +179,29 @@ function mapLaunch(item: ApiLaunch, past = false): Launch {
     webcast:
       streams.map((stream) => externalUrl(stream)).find(Boolean) ?? null,
     infoUrl:
-      item.infoURLs?.map((url) => externalUrl(url)).find(Boolean) ?? null,
+      item.infoURLs?.map((url) => externalUrl(url)).find(Boolean) ??
+      providerHome(item.launch_service_provider?.name ?? ""),
     probability: item.probability ?? null,
   };
+}
+
+export async function getLaunch(id: string): Promise<Launch | null> {
+  const local = fallback.find((launch) => launch.id === id);
+  if (local) return local;
+
+  try {
+    const response = await fetch(
+      `https://ll.thespacedevs.com/2.2.0/launch/${encodeURIComponent(id)}/?mode=detailed`,
+      {
+        next: { revalidate: 300 },
+        headers: { Accept: "application/json" },
+      },
+    );
+    if (!response.ok) return null;
+    return mapLaunch((await response.json()) as ApiLaunch);
+  } catch {
+    return null;
+  }
 }
 
 async function fetchList(kind: "upcoming" | "previous", limit: number) {
