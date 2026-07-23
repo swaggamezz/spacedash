@@ -1,6 +1,8 @@
 "use client";
 
 import type { Launch, LaunchStatus } from "@/lib/launches";
+import { rockets, starshipTimeline, type Rocket } from "@/lib/rockets";
+import { SpaceAssistant } from "@/components/space-assistant";
 import { useEffect, useMemo, useState } from "react";
 
 const icons = {
@@ -76,6 +78,7 @@ function RocketArt({ provider }: { provider: string }) {
 const nav = [
   [icons.rocket, "Overzicht"],
   [icons.calendar, "Launches"],
+  ["★", "Starship"],
   [icons.archive, "Historie"],
   [icons.vehicle, "Raketten"],
   [icons.globe, "Agentschappen"],
@@ -85,6 +88,7 @@ export function Dashboard({ launches }: { launches: Launch[] }) {
   const [active, setActive] = useState("Overzicht");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Launch | null>(null);
+  const [selectedRocket, setSelectedRocket] = useState<Rocket | null>(null);
   const upcoming = launches.filter((launch) => launch.status !== "success" && launch.status !== "failure");
   const previous = launches.filter((launch) => launch.status === "success" || launch.status === "failure");
   const featured = upcoming[0] ?? launches[0];
@@ -180,7 +184,13 @@ export function Dashboard({ launches }: { launches: Launch[] }) {
             </>
           )}
 
-          {active !== "Overzicht" && (
+          {active === "Starship" && <StarshipCenter launches={launches} onOpenLaunch={setSelected} />}
+
+          {active === "Raketten" && (
+            <RocketDatabase onOpen={setSelectedRocket} />
+          )}
+
+          {active !== "Overzicht" && active !== "Starship" && active !== "Raketten" && (
             <section className="browser">
               <div className="filter-row">
                 <span>{active === "Historie" ? "AFGERONDE MISSIES" : "VOLLEDIGE DATABASE"}</span>
@@ -196,6 +206,8 @@ export function Dashboard({ launches }: { launches: Launch[] }) {
       </main>
 
       {selected && <MissionDrawer launch={selected} onClose={() => setSelected(null)} />}
+      {selectedRocket && <RocketDrawer rocket={selectedRocket} onClose={() => setSelectedRocket(null)} />}
+      <SpaceAssistant context={selectedRocket?.name ?? selected?.name ?? (active === "Starship" ? "Starship" : "ruimtevaart")} />
 
       <nav className="mobile-nav">
         {nav.slice(0, 4).map(([icon, label]) => (
@@ -205,6 +217,130 @@ export function Dashboard({ launches }: { launches: Launch[] }) {
         ))}
       </nav>
     </div>
+  );
+}
+
+function StarshipCenter({ launches, onOpenLaunch }: { launches: Launch[]; onOpenLaunch: (launch: Launch) => void }) {
+  const starship = rockets[0];
+  const missions = launches.filter((launch) => /starship|super heavy/i.test(`${launch.name} ${launch.rocket}`));
+  const next = missions.find((launch) => launch.status === "upcoming" || launch.status === "hold");
+  return (
+    <section className="starship-center">
+      <div className="starship-masthead">
+        <div className="starship-copy">
+          <span className="star-kicker">SPACEDASH SPECIAL / VEHICLE 01</span>
+          <h2>STARSHIP</h2>
+          <p>Het grootste vliegende raketsysteem ooit gebouwd. Volledig herbruikbaar, aangedreven door methaan en ontworpen voor de maan, Mars en verder.</p>
+          <div className="starship-actions">
+            {next ? <button className="primary" onClick={() => onOpenLaunch(next)}>Open volgende missie →</button> : <a className="primary" href="https://www.spacex.com/launches/" target="_blank" rel="noreferrer">SpaceX launch center →</a>}
+            <a href="https://www.youtube.com/@SpaceX" target="_blank" rel="noreferrer">Officiële streams</a>
+          </div>
+        </div>
+        <StarshipDiagram />
+        <div className="starship-number">01</div>
+      </div>
+
+      <div className="spec-strip">
+        <div><span>HOOGTE</span><strong>123</strong><small>meter</small></div>
+        <div><span>DIAMETER</span><strong>9</strong><small>meter</small></div>
+        <div><span>STUWKRACHT</span><strong>~89</strong><small>meganewton</small></div>
+        <div><span>RAPTORS</span><strong>39</strong><small>booster + ship</small></div>
+        <div><span>LEO PAYLOAD</span><strong>100+</strong><small>ton, doel</small></div>
+      </div>
+
+      <div className="starship-columns">
+        <article className="tech-panel">
+          <div className="panel-title"><span>01</span><div><small>ARCHITECTUUR</small><h3>Twee volledig herbruikbare trappen</h3></div></div>
+          <div className="stage-compare">
+            <div><b>SUPER HEAVY</b><strong>33× Raptor</strong><p>Booster · boostback · tower catch</p><i style={{ width: "100%" }} /></div>
+            <div><b>STARSHIP</b><strong>6× Raptor</strong><p>Schip · hitteschild · orbitale bijtanking</p><i style={{ width: "58%" }} /></div>
+          </div>
+          <p className="technical-copy">{starship.summary}</p>
+        </article>
+        <article className="tech-panel engine-panel">
+          <div className="panel-title"><span>02</span><div><small>AANDRIJVING</small><h3>Raptor full-flow cycle</h3></div></div>
+          <div className="engine-visual">
+            <div className="engine-bell">Y</div>
+            <dl>
+              <div><dt>Brandstof</dt><dd>CH₄ + LOX</dd></div>
+              <div><dt>Kamerdruk</dt><dd>~350 bar*</dd></div>
+              <div><dt>Stuwkracht</dt><dd>~2,7 MN*</dd></div>
+              <div><dt>Cyclus</dt><dd>Full-flow</dd></div>
+            </dl>
+          </div>
+          <small className="estimate-note">* Publieke Raptor 3-doelwaarden; hardware kan per vlucht verschillen.</small>
+        </article>
+      </div>
+
+      <div className="section-heading star-heading"><div><span>REFERENTIEPROFIEL</span><h3>Starship-vluchttijdlijn</h3></div><small>Werkelijke tijden verschillen per vlucht</small></div>
+      <div className="mission-timeline">
+        {starshipTimeline.map((item, index) => (
+          <div className={`timeline-event ${item.kind}`} key={item.time}>
+            <span>{String(index + 1).padStart(2, "0")}</span>
+            <time>{item.time}</time>
+            <div><strong>{item.event}</strong><p>{item.detail}</p></div>
+          </div>
+        ))}
+      </div>
+
+      <div className="starship-columns history-row">
+        <article className="tech-panel">
+          <div className="panel-title"><span>03</span><div><small>ONTWIKKELING</small><h3>Van hopper naar orbitale architectuur</h3></div></div>
+          <div className="milestones">
+            {[
+              ["2019", "Starhopper", "Eerste vrije vlucht met Raptor"],
+              ["2020–21", "High-altitude tests", "Belly-flop en eerste landing"],
+              ["2023", "IFT-1", "Eerste geïntegreerde vlucht"],
+              ["2024", "IFT-5", "Eerste booster catch"],
+              ["NU", "Iteratief testen", "Ship, booster en hergebruik verbeteren"],
+            ].map(([year, title, detail]) => <div key={title}><time>{year}</time><i /><p><strong>{title}</strong><span>{detail}</span></p></div>)}
+          </div>
+        </article>
+        <article className="tech-panel">
+          <div className="panel-title"><span>04</span><div><small>WAAROM HET ANDERS IS</small><h3>Ontworpen als transportsysteem</h3></div></div>
+          <div className="fact-list">
+            {starship.facts.map((fact, index) => <div key={fact}><b>{index + 1}</b><p>{fact}</p></div>)}
+          </div>
+        </article>
+      </div>
+    </section>
+  );
+}
+
+function StarshipDiagram() {
+  return (
+    <div className="starship-diagram" aria-label="Gestileerde Starship en Super Heavy">
+      <div className="ship-tip" />
+      <div className="ship-body"><i /><i /><i /></div>
+      <div className="hotstage" />
+      <div className="booster-body">
+        <div className="grid-fin left" /><div className="grid-fin right" />
+        <div className="raptor-cluster">{Array.from({ length: 13 }, (_, i) => <i key={i} />)}</div>
+      </div>
+      <span className="label ship-label">STARSHIP <i /></span>
+      <span className="label booster-label">SUPER HEAVY <i /></span>
+    </div>
+  );
+}
+
+function RocketDatabase({ onOpen }: { onOpen: (rocket: Rocket) => void }) {
+  return (
+    <section className="rocket-database">
+      <div className="filter-row"><span>{rockets.length} RAKETSYSTEMEN</span><span>Handmatig gecontroleerde kernspecificaties</span></div>
+      <div className="rocket-table">
+        <div className="rocket-table-head"><span>VOERTUIG</span><span>STATUS</span><span>HOOGTE</span><span>PAYLOAD LEO</span><span>HERGEBRUIK</span><span /></div>
+        {rockets.map((rocket, index) => (
+          <button key={rocket.id} onClick={() => onOpen(rocket)}>
+            <span className="rocket-name"><i>{String(index + 1).padStart(2, "0")}</i><b>{rocket.name}</b><small>{rocket.maker}</small></span>
+            <span><em className={rocket.status.includes("Operationeel") ? "operational" : ""} />{rocket.status}</span>
+            <span>{rocket.height}</span>
+            <span>{rocket.payloadLeo}</span>
+            <span>{rocket.reusable}</span>
+            <span>→</span>
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -227,11 +363,23 @@ function LaunchCard({ launch, onOpen }: { launch: Launch; onOpen: (launch: Launc
 }
 
 function MissionDrawer({ launch, onClose }: { launch: Launch; onClose: () => void }) {
+  const youtubeId = getYouTubeId(launch.webcast);
+  const isStarship = /starship|super heavy/i.test(`${launch.name} ${launch.rocket}`);
   return (
     <div className="drawer-backdrop" onClick={onClose}>
-      <aside className="drawer" onClick={(e) => e.stopPropagation()}>
+      <aside className="drawer mission-drawer" onClick={(e) => e.stopPropagation()}>
         <button className="close" onClick={onClose}>×</button>
-        <div className="drawer-art"><RocketArt provider={launch.provider} /></div>
+        {youtubeId ? (
+          <div className="stream-frame">
+            <iframe
+              src={`https://www.youtube-nocookie.com/embed/${youtubeId}?autoplay=0&rel=0`}
+              title={`Livestream van ${launch.name}`}
+              allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+            <span><i /> OFFICIËLE VIDEOBRON</span>
+          </div>
+        ) : <div className="drawer-art"><RocketArt provider={launch.provider} /></div>}
         <StatusPill status={launch.status} label={launch.statusLabel} />
         <p className="provider">{launch.provider.toUpperCase()}</p>
         <h2>{launch.name}</h2>
@@ -244,9 +392,84 @@ function MissionDrawer({ launch, onClose }: { launch: Launch; onClose: () => voi
           <div><dt>Platform</dt><dd>{launch.pad}</dd></div>
           {launch.probability !== null && <div><dt>Weerkans</dt><dd>{launch.probability}% go</dd></div>}
         </dl>
+        <div className="telemetry-panel">
+          <div className="telemetry-head"><span>LIVE TELEMETRIE</span><small>PUBLIEKE FEED</small></div>
+          <div className="telemetry-grid">
+            <div><span>HOOGTE</span><strong>—</strong><small>niet vrijgegeven</small></div>
+            <div><span>SNELHEID</span><strong>—</strong><small>niet vrijgegeven</small></div>
+            <div><span>MOTOREN</span><strong>—</strong><small>via webcast</small></div>
+          </div>
+          <p>SpaceDash toont alleen echte openbare telemetrie. Waarden worden niet uit een standaardvluchtprofiel als “live” gepresenteerd.</p>
+        </div>
+        {isStarship && (
+          <div className="mini-timeline">
+            <span>STARSHIP REFERENTIEPROFIEL</span>
+            {starshipTimeline.slice(2, 8).map((item) => (
+              <div key={item.time}><time>{item.time}</time><i /><p>{item.event}</p></div>
+            ))}
+            <small>Indicatief — geen live motor- of vluchtstatus</small>
+          </div>
+        )}
         <div className="drawer-actions">
           {launch.webcast && <a className="primary" href={launch.webcast} target="_blank" rel="noreferrer">{icons.play} Open livestream</a>}
           {launch.infoUrl && <a href={launch.infoUrl} target="_blank" rel="noreferrer">Officiële missiepagina {icons.arrow}</a>}
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function getYouTubeId(url: string | null) {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.includes("youtu.be")) return parsed.pathname.slice(1).split("/")[0];
+    if (parsed.hostname.includes("youtube.com")) {
+      if (parsed.pathname.startsWith("/live/") || parsed.pathname.startsWith("/embed/")) return parsed.pathname.split("/")[2];
+      return parsed.searchParams.get("v");
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function RocketDrawer({ rocket, onClose }: { rocket: Rocket; onClose: () => void }) {
+  return (
+    <div className="drawer-backdrop" onClick={onClose}>
+      <aside className="drawer rocket-drawer" onClick={(event) => event.stopPropagation()}>
+        <button className="close" onClick={onClose}>×</button>
+        <div className="rocket-drawer-hero">
+          <div className="rocket-silhouette">▲</div>
+          <span>{rocket.maker.toUpperCase()}</span>
+          <h2>{rocket.name}</h2>
+          <p>{rocket.role}</p>
+        </div>
+        <div className="drawer-status"><i /> {rocket.status}</div>
+        <p className="drawer-description">{rocket.summary}</p>
+        <div className="rocket-spec-grid">
+          {[
+            ["HOOGTE", rocket.height], ["DIAMETER", rocket.diameter],
+            ["STARTMASSA", rocket.mass], ["TRAPPEN", String(rocket.stages)],
+            ["LEO PAYLOAD", rocket.payloadLeo], ["HERGEBRUIK", rocket.reusable],
+          ].map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}
+        </div>
+        <div className="drawer-section-title"><span>AANDRIJVING</span><small>{rocket.propellant}</small></div>
+        <div className="engine-list">
+          {rocket.engines.map((engine) => (
+            <article key={`${engine.name}-${engine.count}`}>
+              <div><b>{engine.name}</b><span>{engine.count}</span></div>
+              <dl>
+                <div><dt>Cyclus</dt><dd>{engine.cycle}</dd></div>
+                <div><dt>Brandstof</dt><dd>{engine.propellant}</dd></div>
+                <div><dt>Stuwkracht</dt><dd>{engine.thrust}</dd></div>
+              </dl>
+            </article>
+          ))}
+        </div>
+        <div className="drawer-section-title"><span>KENMERKEN</span></div>
+        <div className="fact-list compact">
+          {rocket.facts.map((fact, index) => <div key={fact}><b>{index + 1}</b><p>{fact}</p></div>)}
         </div>
       </aside>
     </div>
