@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getLaunch } from "@/lib/launches";
+import { getLaunch, getRelatedLaunches } from "@/lib/launches";
 import { MissionPage } from "@/components/mission-page";
 
 export const revalidate = 300;
@@ -26,5 +26,6 @@ export default async function LaunchPage({ params }: Props) {
   const { id } = await params;
   const launch = await getLaunch(id);
   if (!launch) notFound();
-  return <MissionPage launch={launch} />;
+  const related = await getRelatedLaunches(launch);
+  return <MissionPage launch={launch} related={related} />;
 }
