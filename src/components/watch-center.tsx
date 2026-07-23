@@ -4,7 +4,7 @@ import type { Launch, StreamSource } from "@/lib/launches";
 import { ActiveRefresh } from "@/components/active-refresh";
 import { TimezoneClock } from "@/components/timezone-clock";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Layout = "focus" | "split" | "grid";
 
@@ -38,6 +38,24 @@ function dateLabel(date: string) {
     timeStyle: "short",
     timeZone: "Europe/Amsterdam",
   }).format(new Date(date));
+}
+
+function missionClockValue(date: string) {
+  const difference = Date.now() - new Date(date).getTime();
+  const absolute = Math.abs(difference);
+  const hours = Math.floor(absolute / 3_600_000);
+  const minutes = Math.floor((absolute / 60_000) % 60);
+  const seconds = Math.floor((absolute / 1000) % 60);
+  return `T${difference >= 0 ? "+" : "−"}${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function MissionClock({ date }: { date: string }) {
+  const [value, setValue] = useState(() => missionClockValue(date));
+  useEffect(() => {
+    const timer = window.setInterval(() => setValue(missionClockValue(date)), 1000);
+    return () => window.clearInterval(timer);
+  }, [date]);
+  return <strong>{value}</strong>;
 }
 
 function Feed({ source, featured = false }: { source: StreamSource; featured?: boolean }) {
@@ -153,6 +171,24 @@ export function WatchCenter({ launch }: { launch: Launch }) {
           </section>
         </>
       )}
+
+      <section className="watch-telemetry">
+        <div className="watch-telemetry-head">
+          <div><span>LIVE TELEMETRY</span><h2>Mission data deck</h2></div>
+          <small><i className={launch.webcastLive ? "live" : ""} /> {launch.webcastLive ? "PUBLIEKE WEBCAST LIVE" : "WACHT OP PUBLIEKE DOWNLINK"}</small>
+        </div>
+        <div className="watch-telemetry-grid">
+          <div className="available"><span>MISSIEKLOK</span><MissionClock date={launch.windowStart} /><small>Berekend vanaf bevestigde T−0</small></div>
+          <div className="available"><span>LAUNCHSTATUS</span><strong>{launch.statusLabel}</strong><small>Launch Library-status</small></div>
+          <div className="available"><span>VIDEOFEEDS</span><strong>{sources.length}</strong><small>{launch.webcastLive ? "Uitzending actief" : "Publieke bronnen gevonden"}</small></div>
+          <div><span>HOOGTE</span><strong>—</strong><small>Geen openbare datafeed</small></div>
+          <div><span>SNELHEID</span><strong>—</strong><small>Geen openbare datafeed</small></div>
+          <div><span>MOTORSTATUS</span><strong>—</strong><small>Alleen zichtbaar in webcast</small></div>
+          <div><span>TRAJECTORY</span><strong>—</strong><small>Geen realtime coördinaten</small></div>
+          <div><span>DOWNLINK</span><strong>{launch.webcastLive ? "VIDEO" : "STANDBY"}</strong><small>Geen ruwe telemetry-API</small></div>
+        </div>
+        <p className="watch-telemetry-note">SpaceDash toont uitsluitend echte openbare data. Hoogte, snelheid, motoren en vluchtcomputerdata worden door de meeste launchproviders—waaronder SpaceX—niet als publieke machineleesbare live-feed vrijgegeven. Bekijk daarvoor de officiële overlay in de videofeed.</p>
+      </section>
 
       <footer className="watch-footer">
         <p><i /> Videobeelden komen van externe aanbieders. SpaceDash toont alleen beschikbare publieke feeds en verzint geen telemetrie.</p>
