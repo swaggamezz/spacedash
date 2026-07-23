@@ -5,6 +5,7 @@ import { rockets, starshipTimeline, type Rocket } from "@/lib/rockets";
 import { SpaceAssistant } from "@/components/space-assistant";
 import { TimezoneClock } from "@/components/timezone-clock";
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 
 const icons = {
   rocket: "↗",
@@ -88,7 +89,6 @@ const nav = [
 export function Dashboard({ launches }: { launches: Launch[] }) {
   const [active, setActive] = useState("Overzicht");
   const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState<Launch | null>(null);
   const [selectedRocket, setSelectedRocket] = useState<Rocket | null>(null);
   const upcoming = launches.filter((launch) => launch.status !== "success" && launch.status !== "failure");
   const previous = launches.filter((launch) => launch.status === "success" || launch.status === "failure");
@@ -162,7 +162,7 @@ export function Dashboard({ launches }: { launches: Launch[] }) {
                     <Countdown date={featured.windowStart} large />
                     <div className="hero-actions">
                       {featured.webcast && <a className="primary" href={featured.webcast} target="_blank" rel="noreferrer">{icons.play} Livestream</a>}
-                      <button onClick={() => setSelected(featured)}>Missiedetails {icons.arrow}</button>
+                      <Link href={`/launch/${encodeURIComponent(featured.id)}`}>Open missie {icons.arrow}</Link>
                     </div>
                   </div>
                 </div>
@@ -173,7 +173,7 @@ export function Dashboard({ launches }: { launches: Launch[] }) {
                 <button onClick={() => setActive("Launches")}>Bekijk alle launches {icons.arrow}</button>
               </div>
               <div className="launch-grid">
-                {upcoming.slice(1, 4).map((launch) => <LaunchCard key={launch.id} launch={launch} onOpen={setSelected} />)}
+                {upcoming.slice(1, 4).map((launch) => <LaunchCard key={launch.id} launch={launch} />)}
               </div>
 
               <div className="stats">
@@ -185,7 +185,7 @@ export function Dashboard({ launches }: { launches: Launch[] }) {
             </>
           )}
 
-          {active === "Starship" && <StarshipCenter launches={launches} onOpenLaunch={setSelected} />}
+          {active === "Starship" && <StarshipCenter launches={launches} />}
 
           {active === "Raketten" && (
             <RocketDatabase onOpen={setSelectedRocket} />
@@ -198,7 +198,7 @@ export function Dashboard({ launches }: { launches: Launch[] }) {
                 <span>Automatisch bijgewerkt · elke 5 min</span>
               </div>
               <div className="launch-grid full-grid">
-                {filtered.map((launch) => <LaunchCard key={launch.id} launch={launch} onOpen={setSelected} />)}
+                {filtered.map((launch) => <LaunchCard key={launch.id} launch={launch} />)}
               </div>
               {!filtered.length && <div className="empty">Geen resultaten voor “{query}”.</div>}
             </section>
@@ -206,9 +206,8 @@ export function Dashboard({ launches }: { launches: Launch[] }) {
         </div>
       </main>
 
-      {selected && <MissionDrawer launch={selected} onClose={() => setSelected(null)} />}
       {selectedRocket && <RocketDrawer rocket={selectedRocket} onClose={() => setSelectedRocket(null)} />}
-      <SpaceAssistant context={selectedRocket?.name ?? selected?.name ?? (active === "Starship" ? "Starship" : "ruimtevaart")} />
+      <SpaceAssistant context={selectedRocket?.name ?? (active === "Starship" ? "Starship" : "ruimtevaart")} />
 
       <nav className="mobile-nav">
         {nav.slice(0, 4).map(([icon, label]) => (
@@ -221,7 +220,7 @@ export function Dashboard({ launches }: { launches: Launch[] }) {
   );
 }
 
-function StarshipCenter({ launches, onOpenLaunch }: { launches: Launch[]; onOpenLaunch: (launch: Launch) => void }) {
+function StarshipCenter({ launches }: { launches: Launch[] }) {
   const starship = rockets[0];
   const missions = launches.filter((launch) => /starship|super heavy/i.test(`${launch.name} ${launch.rocket}`));
   const next = missions.find((launch) => launch.status === "upcoming" || launch.status === "hold");
@@ -233,7 +232,7 @@ function StarshipCenter({ launches, onOpenLaunch }: { launches: Launch[]; onOpen
           <h2>STARSHIP</h2>
           <p>Het grootste vliegende raketsysteem ooit gebouwd. Volledig herbruikbaar, aangedreven door methaan en ontworpen voor de maan, Mars en verder.</p>
           <div className="starship-actions">
-            {next ? <button className="primary" onClick={() => onOpenLaunch(next)}>Open volgende missie →</button> : <a className="primary" href="https://www.spacex.com/launches/" target="_blank" rel="noreferrer">SpaceX launch center →</a>}
+            {next ? <Link className="primary" href={`/launch/${encodeURIComponent(next.id)}`}>Open volgende missie →</Link> : <a className="primary" href="https://www.spacex.com/launches/" target="_blank" rel="noreferrer">SpaceX launch center →</a>}
             <a href="https://www.youtube.com/@SpaceX" target="_blank" rel="noreferrer">Officiële streams</a>
           </div>
         </div>
@@ -345,9 +344,9 @@ function RocketDatabase({ onOpen }: { onOpen: (rocket: Rocket) => void }) {
   );
 }
 
-function LaunchCard({ launch, onOpen }: { launch: Launch; onOpen: (launch: Launch) => void }) {
+function LaunchCard({ launch }: { launch: Launch }) {
   return (
-    <article className="launch-card" onClick={() => onOpen(launch)}>
+    <Link className="launch-card" href={`/launch/${encodeURIComponent(launch.id)}`}>
       <div className="card-art"><RocketArt provider={launch.provider} /><StatusPill status={launch.status} label={launch.statusLabel} /></div>
       <div className="card-body">
         <div className="card-topline"><span>{launch.provider.toUpperCase()}</span><span>{launch.orbit}</span></div>
@@ -358,85 +357,10 @@ function LaunchCard({ launch, onOpen }: { launch: Launch; onOpen: (launch: Launc
           <span>{icons.pin} {launch.location}</span>
         </div>
         {launch.status === "upcoming" || launch.status === "hold" ? <Countdown date={launch.windowStart} /> : <span className="result">MISSIE {launch.status === "success" ? "GESLAAGD" : "MISLUKT"}</span>}
-        <a className="card-detail-link" href={`/launch/${encodeURIComponent(launch.id)}`} onClick={(event) => event.stopPropagation()}>
-          Volledige missiepagina →
-        </a>
+        <span className="card-detail-link">Open volledige missie →</span>
       </div>
-    </article>
+    </Link>
   );
-}
-
-function MissionDrawer({ launch, onClose }: { launch: Launch; onClose: () => void }) {
-  const youtubeId = getYouTubeId(launch.webcast);
-  const isStarship = /starship|super heavy/i.test(`${launch.name} ${launch.rocket}`);
-  return (
-    <div className="drawer-backdrop" onClick={onClose}>
-      <aside className="drawer mission-drawer" onClick={(e) => e.stopPropagation()}>
-        <button className="close" onClick={onClose}>×</button>
-        {youtubeId ? (
-          <div className="stream-frame">
-            <iframe
-              src={`https://www.youtube-nocookie.com/embed/${youtubeId}?autoplay=0&rel=0`}
-              title={`Livestream van ${launch.name}`}
-              allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
-            <span><i /> OFFICIËLE VIDEOBRON</span>
-          </div>
-        ) : <div className="drawer-art"><RocketArt provider={launch.provider} /></div>}
-        <StatusPill status={launch.status} label={launch.statusLabel} />
-        <p className="provider">{launch.provider.toUpperCase()}</p>
-        <h2>{launch.name}</h2>
-        <p className="drawer-description">{launch.description}</p>
-        <dl>
-          <div><dt>Raket</dt><dd>{launch.rocket}</dd></div>
-          <div><dt>Doelbaan</dt><dd>{launch.orbit}</dd></div>
-          <div><dt>Venster</dt><dd>{formatDate(launch.windowStart)}</dd></div>
-          <div><dt>Locatie</dt><dd>{launch.location}</dd></div>
-          <div><dt>Platform</dt><dd>{launch.pad}</dd></div>
-          {launch.probability !== null && <div><dt>Weerkans</dt><dd>{launch.probability}% go</dd></div>}
-        </dl>
-        <div className="telemetry-panel">
-          <div className="telemetry-head"><span>LIVE TELEMETRIE</span><small>PUBLIEKE FEED</small></div>
-          <div className="telemetry-grid">
-            <div><span>HOOGTE</span><strong>—</strong><small>niet vrijgegeven</small></div>
-            <div><span>SNELHEID</span><strong>—</strong><small>niet vrijgegeven</small></div>
-            <div><span>MOTOREN</span><strong>—</strong><small>via webcast</small></div>
-          </div>
-          <p>SpaceDash toont alleen echte openbare telemetrie. Waarden worden niet uit een standaardvluchtprofiel als “live” gepresenteerd.</p>
-        </div>
-        {isStarship && (
-          <div className="mini-timeline">
-            <span>STARSHIP REFERENTIEPROFIEL</span>
-            {starshipTimeline.slice(2, 8).map((item) => (
-              <div key={item.time}><time>{item.time}</time><i /><p>{item.event}</p></div>
-            ))}
-            <small>Indicatief — geen live motor- of vluchtstatus</small>
-          </div>
-        )}
-        <div className="drawer-actions">
-          <a className="primary" href={`/launch/${encodeURIComponent(launch.id)}`}>Open volledige missiepagina {icons.arrow}</a>
-          {launch.webcast && <a className="primary" href={launch.webcast} target="_blank" rel="noreferrer">{icons.play} Open livestream</a>}
-          {launch.infoUrl && <a href={launch.infoUrl} target="_blank" rel="noreferrer">Website lanceerorganisatie {icons.arrow}</a>}
-        </div>
-      </aside>
-    </div>
-  );
-}
-
-function getYouTubeId(url: string | null) {
-  if (!url) return null;
-  try {
-    const parsed = new URL(url);
-    if (parsed.hostname.includes("youtu.be")) return parsed.pathname.slice(1).split("/")[0];
-    if (parsed.hostname.includes("youtube.com")) {
-      if (parsed.pathname.startsWith("/live/") || parsed.pathname.startsWith("/embed/")) return parsed.pathname.split("/")[2];
-      return parsed.searchParams.get("v");
-    }
-  } catch {
-    return null;
-  }
-  return null;
 }
 
 function RocketDrawer({ rocket, onClose }: { rocket: Rocket; onClose: () => void }) {
